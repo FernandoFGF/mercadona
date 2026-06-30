@@ -16,6 +16,12 @@ from typing import Iterable
 import config
 
 try:
+    from core.product_matcher import _core_name
+except Exception:
+    def _core_name(name: str) -> str:
+        return name.lower()
+
+try:
     from rapidfuzz import fuzz  # type: ignore
     _HAS_RAPIDFUZZ = True
 except Exception:
@@ -113,8 +119,15 @@ class _ListStore:
         term_n = _normalize(term)
         if not term_n:
             return False
+        term_core = _core_name(term)
         for it in self._load():
-            if _score(term_n, _normalize(it)) >= _FUZZY_THRESHOLD:
+            it_n = _normalize(it)
+            # Match 1: fuzzy directo (umbrella baja para typos)
+            if _score(term_n, it_n) >= _FUZZY_THRESHOLD:
+                return True
+            # Match 2: comparten 'core' (ej. "vinagre" en "vinagre de manzana"
+            # y "vinagre" en la lista -> match, aunque el score fuzzy sea bajo).
+            if term_core and term_core == _core_name(it):
                 return True
         return False
 

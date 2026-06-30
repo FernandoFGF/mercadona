@@ -212,6 +212,8 @@ class RecipeView(ctk.CTkFrame):
             # con "1kg" cada una, sumamos a una sola entrada de 5kg.
             merged: dict[str, dict] = {}
             for name, qty, unit in zip(raw_names, raw_quantities, raw_units):
+                # Dedupe por nombre normalizado: si Gemini devuelve "quinoa" 5 veces
+                # con "1kg" cada una, sumamos a una sola entrada de 5kg.
                 key = name.lower().strip()
                 if key in merged:
                     merged[key]["quantity"] += qty
@@ -219,11 +221,29 @@ class RecipeView(ctk.CTkFrame):
                     merged[key]["display_name"] = merged[key].get("display_name", name)
                 else:
                     merged[key] = {"display_name": name, "quantity": qty, "unit": unit}
+
+            # Dedupe por core: "vinagre de manzana" + "vinagre balsamico" + "vinagre
+            # de vino blanco" se consolidan a un solo "vinagre" antes de aplicar
+            # pantry/avoid. Asi si el usuario tiene "vinagre" en pantry, los tres se
+            # filtran juntos en vez de quedar 3 lineas en el carrito.
+            core_groups: dict[str, dict] = {}
+            for v in merged.values():
+                core = product_matcher._core_name(v["display_name"])
+                if not core:
+                    core_groups[v["display_name"].lower()] = v
+                    continue
+                if core in core_groups:
+                    core_groups[core]["quantity"] += v["quantity"]
+                    if not core_groups[core].get("unit") and v.get("unit"):
+                        core_groups[core]["unit"] = v["unit"]
+                else:
+                    core_groups[core] = v
+
             # Normalizar al final: g/ml > 5 -> kg/litro
-            items_for_matcher = [v["display_name"] for v in merged.values()]
+            items_for_matcher = [v["display_name"] for v in core_groups.values()]
             quantities = [
                 normalize_for_cart(v["quantity"], v.get("unit", ""), v["display_name"])
-                for v in merged.values()
+                for v in core_groups.values()
             ]
 
             avoided = [it for it in items_for_matcher if avoid.contains(it)]
@@ -263,7 +283,8 @@ class RecipeView(ctk.CTkFrame):
 
             self._emit_progress(1.0, "Listo")
             self.after(0, lambda: self._render_results(
-                recipes, shopping, matched, skipped_pantry, avoided
+                recipes, shopping, matched,
+                skipped_pantry, avoided, items_after_pantry,
             ))
         except Exception as e:
             err = e
@@ -275,12 +296,13 @@ class RecipeView(ctk.CTkFrame):
                 state=("normal" if self._last_plan else "disabled")
             ))
 
-    def _render_results(self, recipes, shopping, matched, skipped_pantry=None, avoided=None):
+    def _render_results(self, recipes, shopping, matched, skipped_pantry=None, avoided=None, items_after_pantry=None):
         for w in self.results.winfo_children():
             w.destroy()
 
         skipped_pantry = skipped_pantry or []
         avoided = avoided or []
+        items_after_pantry = items_after_pantry or []
         total_recipes = sum(len(d.get("meals") or [d]) for d in recipes)
         parts = [f"Listo · {len(recipes)} días / {total_recipes} recetas · carrito: {self.cart.total():.2f} €"]
         if skipped_pantry:

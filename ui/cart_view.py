@@ -5,6 +5,7 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 
 from core.cart_engine import Cart
+from core.user_lists import PantryStore
 
 
 class CartView(ctk.CTkFrame):
@@ -43,6 +44,9 @@ class CartView(ctk.CTkFrame):
             text_color="gray",
         ).pack(anchor="w", padx=20, pady=(0, 8))
 
+        self.status = ctk.CTkLabel(self, text="", text_color="gray")
+        self.status.pack(anchor="w", padx=20, pady=(0, 4))
+
         self.list = ctk.CTkScrollableFrame(self, label_text="Productos")
         self.list.pack(fill="both", expand=True, padx=20, pady=10)
         self.refresh()
@@ -56,16 +60,20 @@ class CartView(ctk.CTkFrame):
             row = ctk.CTkFrame(self.list)
             row.pack(fill="x", padx=8, pady=4)
             ctk.CTkLabel(row, text=f"#{it.product_id}", width=60, anchor="w").pack(side="left", padx=8)
-            ctk.CTkLabel(row, text=it.name, anchor="w", wraplength=300, justify="left").pack(
+            ctk.CTkLabel(row, text=it.name, anchor="w", wraplength=240, justify="left").pack(
                 side="left", padx=8, fill="x", expand=True
             )
-            ctk.CTkLabel(row, text=f"{it.unit_price:.2f} €", width=70, anchor="e").pack(side="right", padx=4)
-            ctk.CTkLabel(row, text=f"{it.subtotal:.2f} €", width=70, anchor="e").pack(side="right", padx=4)
+            ctk.CTkLabel(row, text=f"{it.unit_price:.2f} €", width=70, anchor="e").pack(side="right", padx=2)
+            ctk.CTkLabel(row, text=f"{it.subtotal:.2f} €", width=70, anchor="e").pack(side="right", padx=2)
 
+            ctk.CTkButton(
+                row, text="🏺", width=32, fg_color="#363", hover_color="#242",
+                command=lambda n=it.name: self._add_to_pantry(n),
+            ).pack(side="right", padx=2)
             ctk.CTkButton(
                 row, text="🗑", width=32, fg_color="#a33", hover_color="#822",
                 command=lambda pid=it.product_id: self.remove(pid),
-            ).pack(side="right", padx=4)
+            ).pack(side="right", padx=2)
 
             ctk.CTkButton(
                 row, text="−", width=32,
@@ -92,6 +100,14 @@ class CartView(ctk.CTkFrame):
     def remove(self, pid):
         self.cart.remove(pid)
         self.refresh()
+
+    def _add_to_pantry(self, name: str):
+        """Marca este producto como 'ya lo tengo en casa' para futuras recetas."""
+        if not name:
+            return
+        store = PantryStore()
+        if store.add(name):
+            self.status.configure(text=f"Añadido a pantry: {name}")
 
     def _bump(self, pid, current_qty: float, delta: int):
         new_qty = max(0.0, round(float(current_qty) + delta, 4))

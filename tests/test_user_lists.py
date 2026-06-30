@@ -62,3 +62,30 @@ def test_persistence_across_instances(tmp_data_dir):
     p1.add("pasta")
     p2 = PantryStore()
     assert p2.contains("pasta") is True
+
+
+def test_pantry_contains_matches_by_core(tmp_data_dir):
+    """Si el usuario tiene 'vinagre', pantry.contains debe matchear con
+    'vinagre de manzana', 'vinagre balsamico', etc. aunque el score
+    fuzzy directo sea bajo."""
+    p = PantryStore()
+    p.add("vinagre")
+    assert p.contains("vinagre de manzana") is True
+    assert p.contains("vinagre balsamico de Modena") is True
+    assert p.contains("vinagre de vino blanco") is True
+    # Pero no debe matchear con algo sin relacion
+    assert p.contains("aceite de oliva") is False
+
+
+def test_pantry_filter_out_dedupes_variations(tmp_data_dir):
+    """Variaciones de un mismo producto se filtran juntas si el core
+    esta en pantry."""
+    p = PantryStore()
+    p.add("aceite")
+    remaining = p.filter_out([
+        "aceite de oliva virgen extra",
+        "aceite de oliva",
+        "vinagre de manzana",
+        "tomate triturado",
+    ])
+    assert remaining == ["vinagre de manzana", "tomate triturado"]
