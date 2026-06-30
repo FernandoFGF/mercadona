@@ -47,8 +47,8 @@ def _recipe_prompt(user_request: str, days: int, servings: int, restrictions: li
     return f"""
 Petición del usuario: "{user_request}"
 
-Necesito un plan de {days} día(s) con {servings} raciones por receta.
-Para CADA día genera UNA receta principal (comida o cena, tú decides).
+Necesito un plan de {days} día(s), cada día con DOS recetas: una COMIDA (mediodía) y una CENA (noche).
+Cantidades para {servings} raciones por receta (4 raciones = comida para 2 personas + cena del mismo día reutilizando restos cuando tenga sentido).
 
 {dietary}
 
@@ -57,23 +57,47 @@ Devuelve estrictamente este JSON:
   "days": [
     {{
       "day": 1,
-      "meal": "comida|cena",
-      "title": "Nombre de la receta",
-      "description": "Breve descripción en 1 línea",
-      "steps": ["paso 1", "paso 2", "..."],
-      "ingredients": [
-        {{"name": "tomate triturado", "quantity": "200g"}},
-        {{"name": "aceite de oliva virgen extra", "quantity": "30ml"}}
+      "weekday": "lunes",
+      "meals": [
+        {{
+          "meal": "comida",
+          "title": "Nombre de la receta de comida",
+          "description": "Breve descripción en 1 línea",
+          "difficulty": "facil|media|elaborada",
+          "prep_minutes": 20,
+          "steps": ["paso 1", "paso 2", "..."],
+          "ingredients": [
+            {{"name": "tomate triturado", "quantity": "200g"}},
+            {{"name": "aceite de oliva virgen extra", "quantity": "30ml"}}
+          ]
+        }},
+        {{
+          "meal": "cena",
+          "title": "Nombre de la receta de cena",
+          "description": "Breve descripción en 1 línea",
+          "difficulty": "facil|media|elaborada",
+          "prep_minutes": 15,
+          "steps": ["paso 1", "paso 2", "..."],
+          "ingredients": [
+            {{"name": "lechuga", "quantity": "1 unidad"}},
+            {{"name": "atún en conserva", "quantity": "2 latas"}}
+          ]
+        }}
       ]
     }}
   ]
 }}
 
 Reglas:
-- Ingredientes con nombres reconocibles en un supermercado (ej: "pechuga de pollo", "arroz redondo", "tomate triturado", "aceite de oliva virgen extra").
-- Cantidades realistas para {servings} raciones.
-- Si la petición menciona colesterol, calorías, etc., respétalo.
+- EXACTAMENTE {days} objetos en "days", uno por día (1 a {days}).
+- Cada día tiene EXACTAMENTE 2 entradas en "meals": una con "meal":"comida" y otra con "meal":"cena" (en ese orden).
+- "weekday" en minúsculas: lunes, martes, miércoles, jueves, viernes, sábado, domingo.
+- Ingredientes con nombres reconocibles en un supermercado Mercadona (ej: "pechuga de pollo", "arroz redondo", "tomate triturado", "aceite de oliva virgen extra").
+- Cantidades realistas para {servings} raciones por receta.
+- "difficulty" = "facil" para entre semana, "media" o "elaborada" para finde si el usuario lo pide.
 - "steps" entre 3 y 7 pasos cortos.
+- Varía proteínas, verduras y cereales a lo largo de la semana; no repitas la misma proteína tres días seguidos.
+- Si la petición menciona colesterol, calorías, vegetariano, sin gluten, ligero, fresco, verano, etc., respétalo.
 """.strip()
 
 

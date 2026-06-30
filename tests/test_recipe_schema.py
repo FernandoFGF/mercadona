@@ -2,7 +2,7 @@
 import pytest
 
 from core.recipe_schema import (
-    Ingredient, Recipe, MealPlan, ShoppingItem, ShoppingList,
+    Ingredient, Recipe, Day, MealPlan, ShoppingItem, ShoppingList,
 )
 
 
@@ -36,14 +36,43 @@ def test_recipe_filters_empty_steps():
     assert r.steps == ["a", "b"]
 
 
-def test_meal_plan_ingredient_names():
+def test_recipe_new_fields():
+    r = Recipe.from_dict({
+        "day": 1, "meal": "comida", "title": "T", "difficulty": "facil", "prep_minutes": 20,
+    })
+    assert r.difficulty == "facil"
+    assert r.prep_minutes == 20
+
+
+def test_meal_plan_with_days_and_meals():
     plan = MealPlan.from_dict({
         "days": [
-            {"day": 1, "title": "A", "ingredients": [{"name": "arroz"}, {"name": "pollo"}]},
-            {"day": 2, "title": "B", "ingredients": [{"name": "leche"}]},
+            {
+                "day": 1, "weekday": "lunes",
+                "meals": [
+                    {"meal": "comida", "title": "A", "ingredients": [{"name": "arroz"}]},
+                    {"meal": "cena",   "title": "B", "ingredients": [{"name": "leche"}]},
+                ],
+            },
         ]
     })
-    assert plan.ingredient_names() == ["arroz", "pollo", "leche"]
+    assert len(plan.days) == 1
+    assert len(plan.days[0].meals) == 2
+    assert plan.ingredient_names() == ["arroz", "leche"]
+    assert plan.all_recipes()[0].title == "A"
+    assert plan.all_recipes()[1].title == "B"
+
+
+def test_meal_plan_legacy_flat_fallback():
+    """Estructura antigua: cada 'day' es directamente una receta."""
+    plan = MealPlan.from_dict({
+        "days": [
+            {"day": 1, "meal": "comida", "title": "A", "ingredients": [{"name": "arroz"}]},
+        ]
+    })
+    assert len(plan.days) == 1
+    assert len(plan.days[0].meals) == 1
+    assert plan.days[0].meals[0].title == "A"
 
 
 def test_meal_plan_no_days_key():
@@ -66,4 +95,4 @@ def test_shopping_list_bad_structure():
     with pytest.raises(ValueError):
         ShoppingList.from_dict({"shopping_list": "not a list"})
     with pytest.raises(ValueError):
-        ShoppingList.from_dict({"items": []})  # clave incorrecta
+        ShoppingList.from_dict({"items": []})

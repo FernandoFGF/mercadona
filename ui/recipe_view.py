@@ -182,9 +182,11 @@ class RecipeView(ctk.CTkFrame):
             recipes = plan.get("days", [])
 
             all_ingredients = []
-            for r in recipes:
-                for ing in r.get("ingredients", []):
-                    all_ingredients.append(ing["name"])
+            for day in recipes:
+                meals = day.get("meals") or [day]  # compat hacia atrás
+                for m in meals:
+                    for ing in m.get("ingredients", []):
+                        all_ingredients.append(ing["name"])
 
             # Paso 2: consolidar
             self._emit_progress(0.35, "Consolidando ingredientes…")
@@ -260,7 +262,8 @@ class RecipeView(ctk.CTkFrame):
 
         skipped_pantry = skipped_pantry or []
         avoided = avoided or []
-        parts = [f"OK · {len(recipes)} recetas · carrito: {self.cart.total():.2f} €"]
+        total_recipes = sum(len(d.get("meals") or [d]) for d in recipes)
+        parts = [f"OK · {len(recipes)} días / {total_recipes} recetas · carrito: {self.cart.total():.2f} €"]
         if skipped_pantry:
             parts.append(f"pantry: {len(skipped_pantry)}")
         if avoided:
@@ -288,34 +291,57 @@ class RecipeView(ctk.CTkFrame):
             txt = "\n".join(f"  • {x}" for x in avoided)
             ctk.CTkLabel(box, text=txt, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
 
-        for r in recipes:
-            box = ctk.CTkFrame(self.results)
-            box.pack(fill="x", padx=10, pady=8)
+        for day in recipes:
+            day_box = ctk.CTkFrame(self.results)
+            day_box.pack(fill="x", padx=10, pady=10)
+            weekday = day.get("weekday", "")
+            title = f"Día {day.get('day')}" + (f" · {weekday.capitalize()}" if weekday else "")
             ctk.CTkLabel(
-                box,
-                text=f"Día {r.get('day')} · {r.get('meal', '').upper()} — {r.get('title')}",
-                font=ctk.CTkFont(weight="bold"),
-            ).pack(anchor="w", padx=10, pady=(8, 0))
-            if r.get("description"):
-                ctk.CTkLabel(box, text=r["description"], text_color="gray").pack(
-                    anchor="w", padx=10
-                )
-            steps = r.get("steps", [])
-            if steps:
-                ctk.CTkLabel(box, text="Pasos:", font=ctk.CTkFont(weight="bold")).pack(
-                    anchor="w", padx=10, pady=(6, 0)
-                )
-                for s in steps:
-                    ctk.CTkLabel(box, text=f"  • {s}", justify="left", wraplength=900).pack(
-                        anchor="w", padx=20
-                    )
-            ings = r.get("ingredients", [])
-            if ings:
-                ctk.CTkLabel(box, text="Ingredientes:", font=ctk.CTkFont(weight="bold")).pack(
-                    anchor="w", padx=10, pady=(6, 0)
-                )
-                txt = "\n".join(f"  • {i['name']} — {i.get('quantity','')}" for i in ings)
-                ctk.CTkLabel(box, text=txt, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
+                day_box, text=title, font=ctk.CTkFont(size=15, weight="bold"),
+            ).pack(anchor="w", padx=10, pady=(8, 4))
+
+            meals = day.get("meals") or [day]  # compat: estructura plana antigua
+            for r in meals:
+                self._render_meal(day_box, r)
+
+    def _render_meal(self, parent, r: dict):
+        meal = (r.get("meal") or "").upper()
+        meal_emoji = "🍽" if meal == "COMIDA" else "🌙" if meal == "CENA" else "🍴"
+        box = ctk.CTkFrame(parent)
+        box.pack(fill="x", padx=20, pady=4)
+        title = f"{meal_emoji} {meal} — {r.get('title', 'Receta')}"
+        ctk.CTkLabel(box, text=title, font=ctk.CTkFont(weight="bold")).pack(
+            anchor="w", padx=10, pady=(6, 0)
+        )
+        meta_bits = []
+        if r.get("difficulty"):
+            meta_bits.append(f"dificultad: {r['difficulty']}")
+        if r.get("prep_minutes"):
+            meta_bits.append(f"~{r['prep_minutes']} min")
+        if meta_bits:
+            ctk.CTkLabel(
+                box, text="  ·  ".join(meta_bits), text_color="gray",
+            ).pack(anchor="w", padx=10)
+        if r.get("description"):
+            ctk.CTkLabel(box, text=r["description"], text_color="gray").pack(
+                anchor="w", padx=10
+            )
+        steps = r.get("steps", [])
+        if steps:
+            ctk.CTkLabel(box, text="Pasos:", font=ctk.CTkFont(weight="bold")).pack(
+                anchor="w", padx=10, pady=(6, 0)
+            )
+            for s in steps:
+                ctk.CTkLabel(
+                    box, text=f"  • {s}", justify="left", wraplength=900,
+                ).pack(anchor="w", padx=20)
+        ings = r.get("ingredients", [])
+        if ings:
+            ctk.CTkLabel(box, text="Ingredientes:", font=ctk.CTkFont(weight="bold")).pack(
+                anchor="w", padx=10, pady=(6, 0)
+            )
+            txt = "\n".join(f"  • {i['name']} — {i.get('quantity','')}" for i in ings)
+            ctk.CTkLabel(box, text=txt, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
 
     def _on_export_md(self):
         if not self._last_plan:

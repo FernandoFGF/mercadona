@@ -31,6 +31,9 @@ class Recipe:
     description: str
     steps: list[str] = field(default_factory=list)
     ingredients: list[Ingredient] = field(default_factory=list)
+    difficulty: str = "media"
+    prep_minutes: int = 0
+    weekday: str = ""
 
     @classmethod
     def from_dict(cls, d: Any) -> "Recipe":
@@ -45,6 +48,14 @@ class Recipe:
             meal = "comida"
         title = str(d.get("title", "")).strip() or "Receta sin título"
         description = str(d.get("description", "")).strip()
+        difficulty = str(d.get("difficulty", "media")).strip().lower() or "media"
+        if difficulty not in ("facil", "media", "elaborada"):
+            difficulty = "media"
+        try:
+            prep_minutes = int(d.get("prep_minutes", 0) or 0)
+        except (TypeError, ValueError):
+            prep_minutes = 0
+        weekday = str(d.get("weekday", "")).strip().lower()
         steps_raw = d.get("steps", [])
         if not isinstance(steps_raw, list):
             steps_raw = []
@@ -56,12 +67,46 @@ class Recipe:
         return cls(
             day=day, meal=meal, title=title, description=description,
             steps=steps, ingredients=ings,
+            difficulty=difficulty, prep_minutes=prep_minutes, weekday=weekday,
         )
 
 
 @dataclass
+class Day:
+    day: int
+    weekday: str
+    meals: list[Recipe] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, d: Any) -> "Day":
+        if not isinstance(d, dict):
+            raise ValueError(f"day no es dict: {d!r}")
+        try:
+            day = int(d.get("day", 0))
+        except (TypeError, ValueError):
+            raise ValueError(f"day.day inválido: {d.get('day')!r}")
+        weekday = str(d.get("weekday", "")).strip().lower()
+        meals_raw = d.get("meals", [])
+        # Compatibilidad hacia atrás: si Gemini aún devuelve estructura plana
+        # (campos day/meal/title en el objeto de día), lo envolvemos.
+        if not meals_raw and {"meal", "title"}.issubset(d.keys()):
+            meals_raw = [d]
+        if not isinstance(meals_raw, list):
+            meals_raw = []
+        meals = []
+        for m in meals_raw:
+            if not isinstance(m, dict):
+                continue
+            m = dict(m)
+            m.setdefault("day", day)
+            m.setdefault("weekday", weekday)
+            meals.append(Recipe.from_dict(m))
+        return cls(day=day, weekday=weekday, meals=meals)
+
+
+@dataclass
 class MealPlan:
-    days: list[Recipe] = field(default_factory=list)
+    days: list[Day] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: Any) -> "MealPlan":
@@ -72,11 +117,17 @@ class MealPlan:
         raw_days = d["days"]
         if not isinstance(raw_days, list):
             raise ValueError(f"plan.days no es lista: {raw_days!r}")
-        return cls(days=[Recipe.from_dict(r) for r in raw_days if isinstance(r, dict)])
+        return cls(days=[Day.from_dict(r) for r in raw_days if isinstance(r, dict)])
+
+    def all_recipes(self) -> list[Recipe]:
+        out: list[Recipe] = []
+        for d in self.days:
+            out.extend(d.meals)
+        return out
 
     def ingredient_names(self) -> list[str]:
         out: list[str] = []
-        for r in self.days:
+        for r in self.all_recipes():
             for ing in r.ingredients:
                 out.append(ing.name)
         return out
