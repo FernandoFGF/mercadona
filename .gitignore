@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Datos y caches locales
+data/cache.db
+data/*.log
+data/products_cache.json
+data/pantry.json
+data/avoid.json
+data/prompt_history.json
+data/settings.json
+data/embeddings.npz
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Builds
+build/
+dist/
+*.spec
