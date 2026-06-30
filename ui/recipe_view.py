@@ -1,11 +1,18 @@
 """
 Vista: generación de recetas con Gemini y volcado al carrito.
 """
+import queue
 import threading
+from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 from core import recipe_engine, product_matcher
 from core.cart_engine import Cart, CartItem
+from core.prompt_history import add as history_add, load as history_load, clear as history_clear
+from core.quantity import parse_quantity
+from core.recipe_engine import DIETARY_RESTRICTIONS
+from core.recipe_exporter import render_recipes_markdown
+from core.user_lists import PantryStore, AvoidStore
 
 
 class RecipeView(ctk.CTkFrame):
@@ -13,6 +20,9 @@ class RecipeView(ctk.CTkFrame):
         super().__init__(master, corner_radius=0, fg_color="transparent")
         self.cart = cart
         self.on_cart_updated = on_cart_updated
+        self._last_plan: dict | None = None
+        self._last_prompt: str = ""
+        self._progress_q: queue.Queue = queue.Queue()
         self._build()
 
     def _build(self):
@@ -25,6 +35,18 @@ class RecipeView(ctk.CTkFrame):
             text='Pide lo que quieras: "algo sano y bajo en colesterol", "menú de 5 días bajo en calorías"...',
             text_color="gray",
         ).pack(anchor="w", padx=20)
+
+        # M-04: Historial de prompts (dropdown)
+        hist_row = ctk.CTkFrame(self, fg_color="transparent")
+        hist_row.pack(fill="x", padx=20, pady=(10, 0))
+        ctk.CTkLabel(hist_row, text="Historial:").pack(side="left", padx=(0, 5))
+        self.history_var = ctk.StringVar(value="(vacío)")
+        self.history_menu = ctk.CTkOptionMenu(
+            hist_row, variable=self.history_var, values=["(vacío)"], width=400, command=self._on_history_pick
+        )
+        self.history_menu.pack(side="left", padx=(0, 8))
+        ctk.CTkButton(hist_row, text="Limpiar", width=70, command=self._on_history_clear).pack(side="left")
+        self._refresh_history_menu()
 
         opts = ctk.CTkFrame(self, fg_color="transparent")
         opts.pack(fill="x", padx=20, pady=10)
@@ -49,10 +71,37 @@ class RecipeView(ctk.CTkFrame):
         self.prompt.pack(fill="x", padx=20, pady=5)
         self.prompt.insert("0.0", "Algo sano, bajo en colesterol, para esta noche")
 
+        # M-12: filtros dietéticos
+        diet_frame = ctk.CTkFrame(self, fg_color="transparent")
+        diet_frame.pack(fill="x", padx=20, pady=(0, 5))
+        ctk.CTkLabel(diet_frame, text="Dietas:").pack(side="left", padx=(0, 8))
+        self.diet_vars: dict[str, ctk.BooleanVar] = {}
+        for key in DIETARY_RESTRICTIONS:
+            var = ctk.BooleanVar(value=False)
+            self.diet_vars[key] = var
+            label = key.replace("_", " ").capitalize()
+            ctk.CTkCheckBox(diet_frame, text=label, variable=var, width=110).pack(side="left", padx=4)
+
+        btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        btn_row.pack(fill="x", padx=20, pady=(0, 10), anchor="w")
         self.generate_btn = ctk.CTkButton(
-            self, text="✨ Generar recetas y carrito", command=self._on_generate
+            btn_row, text="✨ Generar recetas y carrito", command=self._on_generate
         )
-        self.generate_btn.pack(padx=20, pady=10, anchor="w")
+        self.generate_btn.pack(side="left", padx=(0, 8))
+        self.export_md_btn = ctk.CTkButton(
+            btn_row,
+            text="📄 Exportar recetas (.md)",
+            command=self._on_export_md,
+            state="disabled",
+            fg_color="#356",
+            hover_color="#234",
+        )
+        self.export_md_btn.pack(side="left")
+
+        # M-02: barra de progreso
+        self.progress = ctk.CTkProgressBar(self, width=400)
+        self.progress.set(0)
+        self.progress.pack(padx=20, pady=(0, 4), anchor="w")
 
         self.status = ctk.CTkLabel(self, text="", text_color="gray")
         self.status.pack(anchor="w", padx=20)
@@ -66,15 +115,69 @@ class RecipeView(ctk.CTkFrame):
             return
         days = int(self.days_var.get())
         servings = int(self.serv_var.get())
+        restrictions = [k for k, v in self.diet_vars.items() if v.get()]
+        self._last_prompt = prompt
+        history_add(prompt)
+        self._refresh_history_menu()
         self.generate_btn.configure(state="disabled", text="Generando…")
+        self.export_md_btn.configure(state="disabled")
+        self.progress.set(0)
         self.status.configure(text="Pidiéndole ideas a Gemini…")
         threading.Thread(
-            target=self._worker, args=(prompt, days, servings, self.fresh_var.get()), daemon=True
+            target=self._worker,
+            args=(prompt, days, servings, self.fresh_var.get(), restrictions),
+            daemon=True,
         ).start()
+        self.after(80, self._drain_progress)
 
-    def _worker(self, prompt: str, days: int, servings: int, fresh: bool):
+    def _drain_progress(self):
+        """Drena la cola de progreso y actualiza barra + status."""
         try:
-            plan = recipe_engine.generate_meal_plan(prompt, days=days, servings=servings)
+            while True:
+                fraction, msg = self._progress_q.get_nowait()
+                self.progress.set(fraction)
+                if msg:
+                    self.status.configure(text=msg)
+        except queue.Empty:
+            pass
+        # Solo seguir drenando si el botón sigue desactivado
+        if str(self.generate_btn.cget("state")) == "disabled":
+            self.after(80, self._drain_progress)
+
+    def _emit_progress(self, fraction: float, msg: str):
+        self._progress_q.put((max(0.0, min(1.0, fraction)), msg))
+
+    def _refresh_history_menu(self):
+        entries = history_load()
+        if not entries:
+            self.history_menu.configure(values=["(vacío)"])
+            self.history_var.set("(vacío)")
+            return
+        labels = [e["text"] for e in entries]
+        self.history_menu.configure(values=labels)
+        self.history_var.set(labels[0])
+
+    def _on_history_pick(self, choice: str):
+        if choice == "(vacío)":
+            return
+        self.prompt.delete("1.0", "end")
+        self.prompt.insert("0.0", choice)
+
+    def _on_history_clear(self):
+        history_clear()
+        self._refresh_history_menu()
+
+    def _worker(self, prompt: str, days: int, servings: int, fresh: bool, restrictions: list[str] | None = None):
+        try:
+            pantry = PantryStore()
+            avoid = AvoidStore()
+
+            # Paso 1: pedir recetas
+            self._emit_progress(0.1, "Pidiendo recetas a Gemini…")
+            plan = recipe_engine.generate_meal_plan(
+                prompt, days=days, servings=servings, restrictions=restrictions or []
+            )
+            self._last_plan = plan
             recipes = plan.get("days", [])
 
             all_ingredients = []
@@ -82,28 +185,83 @@ class RecipeView(ctk.CTkFrame):
                 for ing in r.get("ingredients", []):
                     all_ingredients.append(ing["name"])
 
+            # Paso 2: consolidar
+            self._emit_progress(0.35, "Consolidando ingredientes…")
             shopping = recipe_engine.consolidate_shopping_list(recipes)
             items_for_matcher = [it["name"] for it in shopping] or all_ingredients
+            quantities = [parse_quantity(it.get("quantity", "")) for it in shopping] or [1.0] * len(all_ingredients)
 
-            matched = product_matcher.match_many(items_for_matcher, fresh=fresh)
+            avoided = [it for it in items_for_matcher if avoid.contains(it)]
+            items_after_avoid = [it for it in items_for_matcher if not avoid.contains(it)]
+            qtys_after_avoid = [
+                q for it, q in zip(items_for_matcher, quantities) if not avoid.contains(it)
+            ]
+            skipped_pantry = [it for it in items_after_avoid if pantry.contains(it)]
+            items_after_pantry = pantry.filter_out(items_after_avoid)
+            qtys_after_pantry = [
+                q for it, q in zip(items_after_avoid, qtys_after_avoid) if not pantry.contains(it)
+            ]
 
-            for ing_name, product in zip(items_for_matcher, matched):
+            # Paso 3: matching en Mercadona
+            total_to_match = max(1, len(items_after_pantry))
+            self._emit_progress(0.55, f"Buscando 0/{total_to_match} en Mercadona…")
+            matched = product_matcher.match_many(items_after_pantry, fresh=fresh)
+
+            # Paso 4: rellenar carrito
+            for i, (ing_name, product, qty) in enumerate(zip(items_after_pantry, matched, qtys_after_pantry), 1):
+                frac = 0.55 + 0.40 * (i / total_to_match)
+                self._emit_progress(frac, f"Rellenando carrito {i}/{total_to_match}…")
                 if product and product.get("id"):
-                    self.cart.add(product, quantity=1.0, origin=ing_name)
+                    self.cart.add(product, quantity=qty, origin=ing_name)
+                    self.after(0, self.on_cart_updated)
 
-            self.after(0, lambda: self._render_results(recipes, shopping, matched))
+            self._emit_progress(1.0, "Listo")
+            self.after(0, lambda: self._render_results(
+                recipes, shopping, matched, skipped_pantry, avoided
+            ))
         except Exception as e:
             err = e
             self.after(0, lambda: self.status.configure(text=f"Error: {err}", text_color="red"))
+            self._emit_progress(0.0, f"Error: {err}")
         finally:
             self.after(0, lambda: self.generate_btn.configure(state="normal", text="✨ Generar recetas y carrito"))
+            self.after(0, lambda: self.export_md_btn.configure(
+                state=("normal" if self._last_plan else "disabled")
+            ))
 
-    def _render_results(self, recipes, shopping, matched):
+    def _render_results(self, recipes, shopping, matched, skipped_pantry=None, avoided=None):
         for w in self.results.winfo_children():
             w.destroy()
 
-        self.status.configure(text=f"OK · {len(recipes)} recetas · carrito: {self.cart.total():.2f} €")
+        skipped_pantry = skipped_pantry or []
+        avoided = avoided or []
+        parts = [f"OK · {len(recipes)} recetas · carrito: {self.cart.total():.2f} €"]
+        if skipped_pantry:
+            parts.append(f"pantry: {len(skipped_pantry)}")
+        if avoided:
+            parts.append(f"avoid: {len(avoided)}")
+        self.status.configure(text=" · ".join(parts))
         self.on_cart_updated()
+
+        if skipped_pantry:
+            box = ctk.CTkFrame(self.results)
+            box.pack(fill="x", padx=10, pady=8)
+            ctk.CTkLabel(
+                box, text="🏺 Saltados (ya en pantry):",
+                font=ctk.CTkFont(weight="bold"),
+            ).pack(anchor="w", padx=10, pady=(8, 0))
+            txt = "\n".join(f"  • {x}" for x in skipped_pantry)
+            ctk.CTkLabel(box, text=txt, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
+
+        if avoided:
+            box = ctk.CTkFrame(self.results)
+            box.pack(fill="x", padx=10, pady=8)
+            ctk.CTkLabel(
+                box, text="🚫 Saltados (en avoid):",
+                font=ctk.CTkFont(weight="bold"),
+            ).pack(anchor="w", padx=10, pady=(8, 0))
+            txt = "\n".join(f"  • {x}" for x in avoided)
+            ctk.CTkLabel(box, text=txt, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
 
         for r in recipes:
             box = ctk.CTkFrame(self.results)
@@ -133,3 +291,23 @@ class RecipeView(ctk.CTkFrame):
                 )
                 txt = "\n".join(f"  • {i['name']} — {i.get('quantity','')}" for i in ings)
                 ctk.CTkLabel(box, text=txt, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
+
+    def _on_export_md(self):
+        if not self._last_plan:
+            messagebox.showinfo("Sin recetas", "Genera primero un plan de recetas.")
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension=".md",
+            filetypes=[("Markdown", "*.md")],
+            initialfile="recetas.md",
+        )
+        if not path:
+            return
+        md = render_recipes_markdown(self._last_plan, prompt=self._last_prompt)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+        except OSError as e:
+            messagebox.showerror("Error", f"No se pudo escribir el archivo:\n{e}")
+            return
+        messagebox.showinfo("Exportado", f"Recetas guardadas en:\n{path}")

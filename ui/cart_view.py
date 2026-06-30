@@ -53,19 +53,62 @@ class CartView(ctk.CTkFrame):
             row = ctk.CTkFrame(self.list)
             row.pack(fill="x", padx=8, pady=4)
             ctk.CTkLabel(row, text=f"#{it.product_id}", width=60, anchor="w").pack(side="left", padx=8)
-            ctk.CTkLabel(row, text=it.name, anchor="w", wraplength=400, justify="left").pack(
+            ctk.CTkLabel(row, text=it.name, anchor="w", wraplength=300, justify="left").pack(
                 side="left", padx=8, fill="x", expand=True
             )
-            ctk.CTkLabel(row, text=f"{it.unit_price:.2f} €", width=80, anchor="e").pack(side="right", padx=4)
-            ctk.CTkLabel(row, text=f"x{it.quantity:g}", width=60, anchor="e").pack(side="right", padx=4)
-            ctk.CTkLabel(row, text=f"{it.subtotal:.2f} €", width=80, anchor="e").pack(side="right", padx=4)
-            ctk.CTkButton(row, text="✕", width=30, command=lambda pid=it.product_id: self.remove(pid)).pack(
-                side="right", padx=4
+            ctk.CTkLabel(row, text=f"{it.unit_price:.2f} €", width=70, anchor="e").pack(side="right", padx=4)
+            ctk.CTkLabel(row, text=f"{it.subtotal:.2f} €", width=70, anchor="e").pack(side="right", padx=4)
+
+            ctk.CTkButton(
+                row, text="🗑", width=32, fg_color="#a33", hover_color="#822",
+                command=lambda pid=it.product_id: self.remove(pid),
+            ).pack(side="right", padx=4)
+
+            ctk.CTkButton(
+                row, text="−", width=32,
+                command=lambda pid=it.product_id, q=it.quantity: self._bump(pid, q, -1),
+            ).pack(side="right", padx=2)
+            ctk.CTkButton(
+                row, text="+", width=32,
+                command=lambda pid=it.product_id, q=it.quantity: self._bump(pid, q, +1),
+            ).pack(side="right", padx=2)
+
+            qty_var = ctk.StringVar(value=f"{it.quantity:g}")
+            entry = ctk.CTkEntry(row, textvariable=qty_var, width=60, justify="e")
+            entry.pack(side="right", padx=4)
+            entry.bind(
+                "<Return>",
+                lambda _e, pid=it.product_id, var=qty_var: self._commit_qty(pid, var),
+            )
+            entry.bind(
+                "<FocusOut>",
+                lambda _e, pid=it.product_id, var=qty_var: self._commit_qty(pid, var),
             )
         self.total_lbl.configure(text=f"Total: {self.cart.total():.2f} €")
 
     def remove(self, pid):
         self.cart.remove(pid)
+        self.refresh()
+
+    def _bump(self, pid, current_qty: float, delta: int):
+        new_qty = max(0.0, round(float(current_qty) + delta, 4))
+        if new_qty <= 0:
+            self.cart.remove(pid)
+        else:
+            self.cart.update_qty(pid, new_qty)
+        self.refresh()
+
+    def _commit_qty(self, pid, qty_var: ctk.StringVar):
+        raw = qty_var.get().strip().replace(",", ".")
+        try:
+            new_qty = float(raw)
+        except ValueError:
+            self.refresh()
+            return
+        if new_qty <= 0:
+            self.cart.remove(pid)
+        else:
+            self.cart.update_qty(pid, new_qty)
         self.refresh()
 
     def clear_cart(self):

@@ -27,19 +27,30 @@ class Cart:
         pid = product.get("id")
         if pid is None:
             return
+        qty = max(0.0, float(quantity))
         for it in self.items:
             if it.product_id == pid:
-                it.quantity += quantity
+                it.quantity = round(it.quantity + qty, 4)
                 return
         self.items.append(
             CartItem(
                 product_id=pid,
                 name=product.get("name", "?"),
                 unit_price=float(product.get("price", 0.0) or 0.0),
-                quantity=quantity,
+                quantity=round(qty, 4),
                 ingredient_origin=origin,
             )
         )
+
+    def update_qty(self, product_id, quantity: float) -> None:
+        qty = max(0.0, float(quantity))
+        for it in self.items:
+            if it.product_id == product_id:
+                if qty <= 0:
+                    self.remove(product_id)
+                    return
+                it.quantity = round(qty, 4)
+                return
 
     def remove(self, product_id) -> None:
         self.items = [it for it in self.items if it.product_id != product_id]
@@ -54,8 +65,9 @@ class Cart:
         """Formato texto para `mercadona total -f -` y `mercadona cart set-many -f -`."""
         lines = ["# AI Grocery Planner basket"]
         for it in self.items:
+            qty = f"{it.quantity:g}"
             comment = f"  # {it.ingredient_origin}" if it.ingredient_origin else ""
-            lines.append(f"{it.product_id} {it.quantity}{comment}")
+            lines.append(f"{it.product_id} {qty}{comment}")
         return "\n".join(lines)
 
     def merge(self, items: Iterable[CartItem]) -> None:
