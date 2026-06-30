@@ -1,15 +1,17 @@
 """
 Matching ingrediente → producto real de Mercadona.
 
-Estrategia en 3 niveles:
+Estrategia en 4 niveles:
 1. Búsqueda directa con el nombre del ingrediente.
-2. Si falla, fuzzy match sobre los hits (rapidfuzz si está disponible, sino difflib).
-3. Fallback: devuelve el primer hit de la búsqueda aunque el score sea bajo.
+2. Matching semántico con Gemini embeddings (si hay API key).
+3. Fuzzy match sobre los hits (rapidfuzz si está disponible, sino difflib).
+4. Fallback: devuelve el primer hit de la búsqueda aunque el score sea bajo.
 """
 from difflib import SequenceMatcher
 from typing import Any
 
 from adapters import mercadona_cli
+from core import semantic_matcher
 
 try:
     from rapidfuzz import fuzz  # type: ignore
@@ -40,37 +42,48 @@ def _best_hit(ingredient: str, hits: list[dict[str, Any]], min_score: float = 0.
     return None
 
 
-def match(ingredient: str, limit: int = 5, fresh: bool = False) -> dict[str, Any] | None:
-    """
-    Devuelve el mejor producto de Mercadona para un ingrediente.
-    Estructura normalizada:
-      {"id": ..., "name": ..., "price": float, "unit_price": float|None, "raw": ...}
-    """
-    hits = mercadona_cli.search(ingredient, limit=limit, fresh=fresh)
-    if not hits:
-        return None
-
-    best = _best_hit(ingredient, hits) or hits[0]
-
+def _normalize(best: dict[str, Any], ingredient: str) -> dict[str, Any]:
     price = best.get("price_instructions", {}).get("unit_price") if isinstance(
         best.get("price_instructions"), dict
     ) else None
     if price is None:
         price = best.get("unit_price") or best.get("price") or 0.0
-
     name = best.get("display_name") or best.get("name") or best.get("product_name") or ingredient
     pid = best.get("id") or best.get("product_id")
-
     return {
         "id": pid,
         "name": name,
         "price": float(price or 0.0),
         "unit_price": best.get("reference_price") or best.get("unit_price_ref"),
         "raw": best,
+        "match_kind": "unknown",
     }
+
+
+def match(ingredient: str, limit: int = 5, fresh: bool = False) -> dict[str, Any] | None:
+    """
+    Devuelve el mejor producto de Mercadona para un ingrediente.
+    Estructura normalizada:
+      {"id": ..., "name": ..., "price": float, "unit_price": float|None,
+       "raw": ..., "match_kind": "semantic"|"fuzzy"|"fallback"}
+    """
+    hits = mercadona_cli.search(ingredient, limit=limit, fresh=fresh)
+    if not hits:
+        return None
+
+    best = semantic_matcher.match_semantic(ingredient, hits)
+    if best is not None:
+        result = _normalize(best, ingredient)
+        result["match_kind"] = "semantic"
+        return result
+
+    best = _best_hit(ingredient, hits) or hits[0]
+    result = _normalize(best, ingredient)
+    result["match_kind"] = "fuzzy" if _best_hit(ingredient, hits) else "fallback"
+    return result
 
 
 def match_many(ingredients: list[str], fresh: bool = True) -> list[dict[str, Any]]:
     """Empareja varios ingredientes, devolviendo la lista de productos resueltos."""
-    return [match(ing, fresh=fresh) or {"id": None, "name": ing, "price": 0.0, "raw": None}
+    return [match(ing, fresh=fresh) or {"id": None, "name": ing, "price": 0.0, "raw": None, "match_kind": "none"}
             for ing in ingredients]

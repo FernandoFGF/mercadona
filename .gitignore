@@ -12,12 +12,8 @@ env/
 # Datos y caches locales
 data/cache.db
 data/*.log
-data/products_cache.json
-data/pantry.json
-data/avoid.json
-data/prompt_history.json
-data/settings.json
-data/embeddings.npz
+data/*.json
+data/*.npz
 
 # IDE
 .vscode/
