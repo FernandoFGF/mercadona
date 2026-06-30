@@ -8,8 +8,9 @@ import customtkinter as ctk
 
 from core import recipe_engine, product_matcher
 from core.cart_engine import Cart, CartItem
+from core.logging_setup import get_logger
 from core.prompt_history import add as history_add, load as history_load, clear as history_clear
-from core.quantity import parse_quantity
+from core.quantity import parse_quantity, normalize_for_cart, extract_unit
 from core.recipe_engine import DIETARY_RESTRICTIONS
 from core.recipe_exporter import render_recipes_markdown
 from core.user_lists import PantryStore, AvoidStore
@@ -190,19 +191,25 @@ class RecipeView(ctk.CTkFrame):
             shopping = recipe_engine.consolidate_shopping_list(recipes)
             raw_names = [it["name"] for it in shopping] or all_ingredients
             raw_quantities = [parse_quantity(it.get("quantity", "")) for it in shopping] or [1.0] * len(all_ingredients)
+            raw_units = [extract_unit(it.get("quantity", "")) for it in shopping] or [""] * len(all_ingredients)
 
             # Dedupe por nombre normalizado: si Gemini devuelve "quinoa" 5 veces
             # con "1kg" cada una, sumamos a una sola entrada de 5kg.
             merged: dict[str, dict] = {}
-            for name, qty in zip(raw_names, raw_quantities):
+            for name, qty, unit in zip(raw_names, raw_quantities, raw_units):
                 key = name.lower().strip()
                 if key in merged:
                     merged[key]["quantity"] += qty
+                    merged[key]["unit"] = merged[key].get("unit") or unit
                     merged[key]["display_name"] = merged[key].get("display_name", name)
                 else:
-                    merged[key] = {"display_name": name, "quantity": qty}
+                    merged[key] = {"display_name": name, "quantity": qty, "unit": unit}
+            # Normalizar al final: g/ml > 5 -> kg/litro
             items_for_matcher = [v["display_name"] for v in merged.values()]
-            quantities = [v["quantity"] for v in merged.values()]
+            quantities = [
+                normalize_for_cart(v["quantity"], v.get("unit", ""), v["display_name"])
+                for v in merged.values()
+            ]
 
             avoided = [it for it in items_for_matcher if avoid.contains(it)]
             items_after_avoid = [it for it in items_for_matcher if not avoid.contains(it)]
@@ -221,7 +228,6 @@ class RecipeView(ctk.CTkFrame):
             matched = product_matcher.match_many(items_after_pantry, fresh=fresh)
 
             # Paso 4: rellenar carrito
-            from core.logging_setup import get_logger
             cart_log = get_logger("cart")
             for i, (ing_name, product, qty) in enumerate(zip(items_after_pantry, matched, qtys_after_pantry), 1):
                 frac = 0.55 + 0.40 * (i / total_to_match)
