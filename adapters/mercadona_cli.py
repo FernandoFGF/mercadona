@@ -5,6 +5,7 @@ Permite usar el CLI como si fuera una API local: search, product,
 categories, batch, total. Todo devuelve dicts / listas de dicts.
 """
 import json
+import logging
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,9 @@ from pathlib import Path
 from typing import Any
 
 import config
+
+
+logger = logging.getLogger(__name__)
 
 
 class MercadonaCLIError(Exception):
@@ -39,16 +43,16 @@ def _load_cache_from_disk() -> None:
             ts = float(entry.get("ts", 0))
             if now - ts < _CACHE_TTL_SECONDS:
                 _CACHE[key] = (ts, entry.get("hits", []))
-    except (OSError, json.JSONDecodeError, ValueError):
-        pass
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        logger.warning("Cache de productos no legible: %s", e)
 
 
 def _save_cache_to_disk() -> None:
     try:
         payload = {key: {"ts": ts, "hits": hits} for key, (ts, hits) in _CACHE.items()}
         config.PRODUCTS_CACHE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    except OSError:
-        pass
+    except OSError as e:
+        logger.warning("No se pudo guardar cache de productos: %s", e)
 
 
 def _normalize_key(query: str) -> str:
@@ -80,8 +84,8 @@ def clear_cache() -> None:
     _CACHE_LOADED = True
     try:
         config.PRODUCTS_CACHE.unlink(missing_ok=True)
-    except OSError:
-        pass
+    except OSError as e:
+        logger.warning("No se pudo borrar cache de productos: %s", e)
 
 
 def _resolve_cmd(extra_args: list[str]) -> list[str]:
@@ -126,6 +130,8 @@ def _run(args: list[str], timeout: int = 60, stdin_data: str | None = None) -> d
     )
 
     if result.returncode != 0:
+        logger.warning("mercadona CLI rc=%d cmd=%s stderr=%s",
+                       result.returncode, cmd, result.stderr.strip())
         raise MercadonaCLIError(
             f"mercadona CLI falló ({' '.join(cmd)}): {result.stderr.strip() or result.stdout.strip()}"
         )

@@ -77,3 +77,21 @@ class Cart:
                 quantity=it.quantity,
                 origin=it.ingredient_origin,
             )
+
+    def to_csv(self) -> str:
+        """Exporta el carrito a CSV con cabecera fija."""
+        import csv
+        import io
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["id", "producto", "cantidad", "precio_unit", "subtotal", "origen"])
+        for it in self.items:
+            writer.writerow([
+                it.product_id,
+                it.name,
+                f"{it.quantity:g}",
+                f"{it.unit_price:.2f}",
+                f"{it.subtotal:.2f}",
+                it.ingredient_origin,
+            ])
+        return buf.getvalue()

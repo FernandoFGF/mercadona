@@ -5,15 +5,17 @@ cambia entre vistas.
 import customtkinter as ctk
 
 from core.cart_engine import Cart
+from core.settings_store import get as settings_get
 from adapters import mercadona_cli
 from ui.recipe_view import RecipeView
 from ui.cart_view import CartView
 from ui.search_view import SearchView
 from ui.pantry_view import PantryView
 from ui.avoid_view import AvoidView
+from ui.settings_dialog import SettingsDialog
 
 
-ctk.set_appearance_mode("dark")
+ctk.set_appearance_mode(str(settings_get("appearance_mode")))
 ctk.set_default_color_theme("blue")
 
 
@@ -86,6 +88,17 @@ class Dashboard(ctk.CTk):
         self.status_cli = ctk.CTkLabel(self.sidebar, text="", text_color="gray")
         self.status_cli.pack(side="bottom", padx=20, anchor="w")
 
+        # M-14: botón de ajustes; M-17: switch de tema
+        tools = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        tools.pack(side="bottom", fill="x", padx=12, pady=8)
+        self.theme_var = ctk.StringVar(value=str(settings_get("appearance_mode")))
+        self.theme_switch = ctk.CTkSwitch(
+            tools, text="Tema claro", command=self._toggle_theme,
+            variable=self.theme_var, onvalue="light", offvalue="dark",
+        )
+        self.theme_switch.pack(side="left", padx=4)
+        ctk.CTkButton(tools, text="⚙", width=36, command=self._open_settings).pack(side="right")
+
         self.container = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.container.grid(row=0, column=1, sticky="nsew")
         self.container.grid_rowconfigure(0, weight=1)
@@ -128,3 +141,14 @@ class Dashboard(ctk.CTk):
         cart_frame = self._frames.get("cart")
         if cart_frame and hasattr(cart_frame, "refresh"):
             cart_frame.refresh()
+
+    def _toggle_theme(self):
+        mode = self.theme_var.get()
+        ctk.set_appearance_mode(mode)
+
+    def _open_settings(self):
+        SettingsDialog(self, on_appearance_change=self._apply_theme)
+
+    def _apply_theme(self, mode: str):
+        ctk.set_appearance_mode(mode)
+        self.theme_var.set(mode)

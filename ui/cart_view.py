@@ -30,6 +30,9 @@ class CartView(ctk.CTkFrame):
         ctk.CTkButton(actions, text="Exportar basket.txt", command=self.export_basket, width=160).pack(
             side="left", padx=(0, 8)
         )
+        ctk.CTkButton(actions, text="Exportar CSV", command=self.export_csv, width=120).pack(
+            side="left", padx=(0, 8)
+        )
         ctk.CTkButton(
             actions, text="Vaciar carrito", command=self.clear_cart, fg_color="#a33", hover_color="#822", width=120
         ).pack(side="left")
@@ -128,3 +131,20 @@ class CartView(ctk.CTkFrame):
         with open(path, "w", encoding="utf-8") as f:
             f.write(self.cart.to_basket())
         messagebox.showinfo("Exportado", f"Basket guardado en:\n{path}")
+
+    def export_csv(self):
+        if not self.cart.items:
+            messagebox.showinfo("Vacío", "No hay productos en el carrito.")
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv", filetypes=[("CSV", "*.csv")], initialfile="basket.csv"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(self.cart.to_csv())
+        except OSError as e:
+            messagebox.showerror("Error", f"No se pudo escribir el archivo:\n{e}")
+            return
+        messagebox.showinfo("Exportado", f"CSV guardado en:\n{path}")
