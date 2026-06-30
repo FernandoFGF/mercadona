@@ -4,6 +4,7 @@ Vista genérica para listas del usuario (pantry / avoid).
 import customtkinter as ctk
 from tkinter import messagebox
 
+from core.event_bus import default_bus
 from core.user_lists import _ListStore
 
 
@@ -13,6 +14,15 @@ class SimpleListView(ctk.CTkFrame):
         self.store = store
         self._build(title, hint, empty_msg)
         self.refresh()
+        # Suscribirse al evento de cambio para refrescar cuando otra vista añade algo
+        default_bus.on(store.event_name, self._on_external_change)
+
+    def _on_external_change(self, _class_name: str = "") -> None:
+        """Callback del bus cuando se modifica la lista desde otra vista."""
+        try:
+            self.refresh()
+        except Exception:
+            pass
 
     def _build(self, title: str, hint: str, empty_msg: str):
         self.empty_msg = empty_msg

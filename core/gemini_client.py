@@ -64,11 +64,14 @@ def _call(prompt: str, system: str | None = None, temperature: float = 0.7) -> s
             resp = requests.post(url, json=body, timeout=120)
         except requests.RequestException as e:
             last_error = e
-            logger.warning("Gemini request error (attempt %d/%d): %s", attempt + 1, _MAX_RETRIES, e)
+            logger.warning(
+                "Error en petición a Gemini (intento %d/%d): %s",
+                attempt + 1, _MAX_RETRIES, e,
+            )
             if attempt < _MAX_RETRIES - 1:
                 time.sleep(2 ** attempt)
                 continue
-            raise GeminiError(f"Gemini request failed: {e}") from e
+            raise GeminiError(f"Petición a Gemini fallida: {e}") from e
 
         if resp.status_code == 200:
             data = resp.json()
@@ -80,7 +83,7 @@ def _call(prompt: str, system: str | None = None, temperature: float = 0.7) -> s
         if resp.status_code in _RETRY_STATUS:
             last_error = GeminiError(f"Gemini HTTP {resp.status_code}: {resp.text[:300]}")
             logger.warning(
-                "Gemini HTTP %d (attempt %d/%d), retrying in %ds",
+                "Gemini HTTP %d (intento %d/%d), reintentando en %ds",
                 resp.status_code, attempt + 1, _MAX_RETRIES, 2 ** attempt,
             )
             if attempt < _MAX_RETRIES - 1:
@@ -91,7 +94,7 @@ def _call(prompt: str, system: str | None = None, temperature: float = 0.7) -> s
 
     if last_error:
         raise last_error
-    raise GeminiError("Gemini: reintentos agotados sin error específico")
+    raise GeminiError("Gemini: reintentos agotados")
 
 
 def generate_json(prompt: str, system: str | None = None) -> Any:

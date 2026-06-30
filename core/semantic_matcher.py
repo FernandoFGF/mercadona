@@ -156,19 +156,19 @@ def _embed_one(text: str) -> np.ndarray | None:
     try:
         resp = requests.post(url, json=body, timeout=30)
     except requests.RequestException as e:
-        logger.warning("Embedding request error: %s", e)
+        logger.warning("Error en petición de embedding: %s", e)
         return None
     if resp.status_code == 429:
-        logger.warning("Embedding HTTP 429 (cuota agotada, rate limit)")
+        logger.warning("Embeddings HTTP 429 (cuota agotada, rate limit)")
         _register_429(key)
         return None
     if resp.status_code != 200:
-        logger.warning("Embedding HTTP %d: %s", resp.status_code, resp.text[:200])
+        logger.warning("Embeddings HTTP %d: %s", resp.status_code, resp.text[:200])
         return None
     try:
         values = resp.json()["embedding"]["values"]
     except (KeyError, ValueError) as e:
-        logger.warning("Embedding respuesta inesperada: %s", e)
+        logger.warning("Embeddings respuesta inesperada: %s", e)
         return None
     return np.array(values, dtype=np.float32)
 
@@ -251,7 +251,7 @@ def match_semantic(
 
     if best_pid is None or best_score < min_score:
         logger.info(
-            "Semantic match: best score %.3f < %.3f for '%s'",
+            "Match semántico: mejor score %.3f < %.3f para '%s'",
             best_score, min_score, ingredient,
         )
         return None

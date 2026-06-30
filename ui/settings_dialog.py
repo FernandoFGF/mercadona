@@ -64,7 +64,7 @@ class SettingsDialog(ctk.CTkToplevel):
         ).grid(row=5, column=1, sticky="w", padx=10)
         ctk.CTkLabel(
             body,
-            text="Desactívalo si ves errores 429\n(quota de Gemini agotada)",
+            text="Desactívalo si ves errores 429\n(cuota de Gemini agotada)",
             text_color="gray",
         ).grid(row=6, column=1, sticky="w", padx=10)
 

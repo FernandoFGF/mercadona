@@ -49,6 +49,7 @@ def _score(a: str, b: str) -> float:
 
 class _ListStore:
     path: Path
+    event_name: str = "list_changed"
 
     def __init__(self):
         self.path = self._resolve_path()
@@ -76,6 +77,13 @@ class _ListStore:
         except OSError:
             pass
 
+    def _emit(self) -> None:
+        try:
+            from core.event_bus import default_bus
+            default_bus.emit(self.event_name, self.__class__.__name__)
+        except Exception:
+            pass
+
     def list(self) -> list[str]:
         return self._load()
 
@@ -88,6 +96,7 @@ class _ListStore:
             return False
         items.append(term)
         self._save(items)
+        self._emit()
         return True
 
     def remove(self, term: str) -> bool:
@@ -97,6 +106,7 @@ class _ListStore:
         if len(new_items) == len(items):
             return False
         self._save(new_items)
+        self._emit()
         return True
 
     def contains(self, term: str) -> bool:
@@ -118,10 +128,14 @@ class _ListStore:
 
 
 class PantryStore(_ListStore):
+    event_name = "pantry_changed"
+
     def _resolve_path(self) -> Path:
         return _pantry_path()
 
 
 class AvoidStore(_ListStore):
+    event_name = "avoid_changed"
+
     def _resolve_path(self) -> Path:
         return _avoid_path()

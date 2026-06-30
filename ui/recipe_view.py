@@ -134,7 +134,7 @@ class RecipeView(ctk.CTkFrame):
         self.generate_btn.configure(state="disabled", text="Generando…")
         self.export_md_btn.configure(state="disabled")
         self.progress.set(0)
-        self.status.configure(text="Pidiéndole ideas a Gemini…")
+        self.status.configure(text="Pidiendo ideas a Gemini…")
         threading.Thread(
             target=self._worker,
             args=(prompt, days, servings, self.fresh_var.get(), restrictions, personas, difficulty),
@@ -282,7 +282,7 @@ class RecipeView(ctk.CTkFrame):
         skipped_pantry = skipped_pantry or []
         avoided = avoided or []
         total_recipes = sum(len(d.get("meals") or [d]) for d in recipes)
-        parts = [f"OK · {len(recipes)} días / {total_recipes} recetas · carrito: {self.cart.total():.2f} €"]
+        parts = [f"Listo · {len(recipes)} días / {total_recipes} recetas · carrito: {self.cart.total():.2f} €"]
         if skipped_pantry:
             parts.append(f"pantry: {len(skipped_pantry)}")
         if avoided:
