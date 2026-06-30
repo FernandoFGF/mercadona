@@ -25,8 +25,8 @@ import config
 logger = logging.getLogger(__name__)
 
 
-_EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent"
-_EMBED_DIM = 768
+_EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent"
+_EMBED_DIM = 3072  # gemini-embedding-001 (legacy: 768 con text-embedding-004)
 _CACHE_PATH = config.DATA_DIR / "embeddings.npz"
 _TTL_SECONDS = 7 * 24 * 3600
 _MIN_SCORE = 0.55
@@ -68,7 +68,7 @@ def _embed_one(text: str) -> np.ndarray | None:
     if not _is_enabled():
         return None
     body = {
-        "model": "models/text-embedding-004",
+        "model": "models/gemini-embedding-001",
         "content": {"parts": [{"text": text}]},
         "taskType": "RETRIEVAL_QUERY",
     }
