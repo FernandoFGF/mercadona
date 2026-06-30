@@ -1,11 +1,36 @@
 """
 Vista: búsqueda manual de productos en Mercadona + añadir al carrito.
 """
+import json
 import threading
+from pathlib import Path
+
 import customtkinter as ctk
 
 from adapters import mercadona_cli
 from core.cart_engine import Cart
+import config
+
+
+_DEFAULT_MATCHES_PATH = config.DATA_DIR / "default_matches.json"
+
+
+def _load_default_matches() -> dict[str, int | str]:
+    if not _DEFAULT_MATCHES_PATH.exists():
+        return {}
+    try:
+        return json.loads(_DEFAULT_MATCHES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_default_matches(matches: dict[str, int | str]) -> None:
+    try:
+        _DEFAULT_MATCHES_PATH.write_text(
+            json.dumps(matches, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
 
 
 class SearchView(ctk.CTkFrame):
@@ -14,6 +39,7 @@ class SearchView(ctk.CTkFrame):
         self.cart = cart
         self.on_cart_updated = on_cart_updated
         self._hits: list[dict] = []
+        self._default_matches = _load_default_matches()
         self._build()
 
     def _build(self):
@@ -60,6 +86,7 @@ class SearchView(ctk.CTkFrame):
         for w in self.results.winfo_children():
             w.destroy()
         self.status.configure(text=f"{len(self._hits)} resultados")
+        current_query = self.query.get().strip()
         for h in self._hits:
             name = h.get("display_name") or h.get("name") or h.get("product_name") or "?"
             pid = h.get("id")
@@ -68,7 +95,7 @@ class SearchView(ctk.CTkFrame):
             ref = h.get("reference_price") or ""
             row = ctk.CTkFrame(self.results)
             row.pack(fill="x", padx=8, pady=4)
-            ctk.CTkLabel(row, text=name, anchor="w", wraplength=500, justify="left").pack(
+            ctk.CTkLabel(row, text=name, anchor="w", wraplength=400, justify="left").pack(
                 side="left", padx=8, fill="x", expand=True
             )
             ctk.CTkLabel(row, text=f"{float(price):.2f} €", width=80, anchor="e").pack(side="right", padx=4)
@@ -82,6 +109,14 @@ class SearchView(ctk.CTkFrame):
                 width=90,
                 command=lambda p=h: self._add(p),
             ).pack(side="right", padx=4)
+            ctk.CTkButton(
+                row,
+                text="★ Guardar",
+                width=90,
+                fg_color="#356",
+                hover_color="#234",
+                command=lambda p=h, q=current_query: self._save_default(q, p),
+            ).pack(side="right", padx=4)
 
     def _add(self, product: dict):
         pi = product.get("price_instructions", {}) if isinstance(product.get("price_instructions"), dict) else {}
@@ -93,3 +128,14 @@ class SearchView(ctk.CTkFrame):
         self.cart.add(normalized, quantity=1.0, origin="búsqueda manual")
         self.on_cart_updated()
         self.status.configure(text=f"Añadido: {normalized['name']}")
+
+    def _save_default(self, term: str, product: dict):
+        if not term:
+            return
+        pid = product.get("id")
+        if pid is None:
+            return
+        self._default_matches[term.lower().strip()] = pid
+        _save_default_matches(self._default_matches)
+        name = product.get("display_name") or product.get("name") or str(pid)
+        self.status.configure(text=f"Guardado como match por defecto para '{term}': {name}")

@@ -8,6 +8,7 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,71 @@ import config
 
 class MercadonaCLIError(Exception):
     pass
+
+
+_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_CACHE_TTL_SECONDS = 7 * 24 * 3600
+_CACHE_LOADED = False
+
+
+def _load_cache_from_disk() -> None:
+    global _CACHE_LOADED
+    if _CACHE_LOADED:
+        return
+    _CACHE_LOADED = True
+    path = config.PRODUCTS_CACHE
+    if not path.exists():
+        return
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        now = time.time()
+        for key, entry in raw.items():
+            ts = float(entry.get("ts", 0))
+            if now - ts < _CACHE_TTL_SECONDS:
+                _CACHE[key] = (ts, entry.get("hits", []))
+    except (OSError, json.JSONDecodeError, ValueError):
+        pass
+
+
+def _save_cache_to_disk() -> None:
+    try:
+        payload = {key: {"ts": ts, "hits": hits} for key, (ts, hits) in _CACHE.items()}
+        config.PRODUCTS_CACHE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _normalize_key(query: str) -> str:
+    return query.lower().strip()
+
+
+def _cache_get(query: str) -> list[dict[str, Any]] | None:
+    _load_cache_from_disk()
+    entry = _CACHE.get(_normalize_key(query))
+    if entry is None:
+        return None
+    ts, hits = entry
+    if time.time() - ts > _CACHE_TTL_SECONDS:
+        _CACHE.pop(_normalize_key(query), None)
+        return None
+    return hits
+
+
+def _cache_set(query: str, hits: list[dict[str, Any]]) -> None:
+    _load_cache_from_disk()
+    _CACHE[_normalize_key(query)] = (time.time(), hits)
+    _save_cache_to_disk()
+
+
+def clear_cache() -> None:
+    """Limpia la cache en memoria y en disco. Útil para tests / dev."""
+    global _CACHE_LOADED
+    _CACHE.clear()
+    _CACHE_LOADED = True
+    try:
+        config.PRODUCTS_CACHE.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _resolve_cmd(extra_args: list[str]) -> list[str]:
@@ -75,15 +141,22 @@ def _run(args: list[str], timeout: int = 60, stdin_data: str | None = None) -> d
 
 def search(query: str, limit: int = 5, fresh: bool = False) -> list[dict[str, Any]]:
     """Busca productos por nombre. Devuelve lista de productos."""
+    if not fresh:
+        cached = _cache_get(query)
+        if cached is not None:
+            return cached[:limit]
     args = ["search", query, "--limit", str(limit)]
     if fresh:
         args.append("--fresh")
     data = _run(args)
     if isinstance(data, dict):
-        return data.get("hits", data.get("products", []))
-    if isinstance(data, list):
-        return data
-    return []
+        hits = data.get("hits", data.get("products", []))
+    elif isinstance(data, list):
+        hits = data
+    else:
+        hits = []
+    _cache_set(query, hits)
+    return hits[:limit]
 
 
 def product(product_id: int | str) -> dict[str, Any]:
@@ -145,3 +218,8 @@ def whoami() -> dict[str, Any]:
 def is_available() -> bool:
     """True si el binario mercadona está en PATH o en la ruta configurada."""
     return shutil.which(config.MERCADONA_CLI) is not None or Path(config.MERCADONA_CLI).exists()
+
+
+def is_cache_populated() -> bool:
+    """True si hay algo persistido en la cache de disco."""
+    return config.PRODUCTS_CACHE.exists() and config.PRODUCTS_CACHE.stat().st_size > 0

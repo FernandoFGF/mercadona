@@ -9,6 +9,8 @@ from adapters import mercadona_cli
 from ui.recipe_view import RecipeView
 from ui.cart_view import CartView
 from ui.search_view import SearchView
+from ui.pantry_view import PantryView
+from ui.avoid_view import AvoidView
 
 
 ctk.set_appearance_mode("dark")
@@ -19,6 +21,8 @@ VIEWS = {
     "recipe": ("🥗 Recipe Generator", RecipeView),
     "cart": ("🛒 Cart", CartView),
     "search": ("🔍 Product Search", SearchView),
+    "pantry": ("🏺 Pantry", PantryView),
+    "avoid": ("🚫 Avoid", AvoidView),
 }
 
 
@@ -62,8 +66,22 @@ class Dashboard(ctk.CTk):
             b.pack(fill="x", pady=2)
             self._nav_btns[key] = b
 
-        self.cart_summary = ctk.CTkLabel(self.sidebar, text="", justify="left", text_color="gray")
-        self.cart_summary.pack(side="bottom", padx=20, pady=20, anchor="w")
+        # M-05: bloque destacado de precio en vivo
+        self.price_box = ctk.CTkFrame(self.sidebar)
+        self.price_box.pack(side="bottom", fill="x", padx=12, pady=(8, 4))
+        ctk.CTkLabel(
+            self.price_box, text="Total estimado", text_color="gray",
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", padx=12, pady=(8, 0))
+        self.price_lbl = ctk.CTkLabel(
+            self.price_box, text="0.00 €",
+            font=ctk.CTkFont(size=24, weight="bold"),
+        )
+        self.price_lbl.pack(anchor="w", padx=12, pady=(0, 4))
+        self.cart_summary = ctk.CTkLabel(
+            self.price_box, text="0 productos", text_color="gray", justify="left",
+        )
+        self.cart_summary.pack(anchor="w", padx=12, pady=(0, 8))
 
         self.status_cli = ctk.CTkLabel(self.sidebar, text="", text_color="gray")
         self.status_cli.pack(side="bottom", padx=20, anchor="w")
@@ -75,7 +93,7 @@ class Dashboard(ctk.CTk):
 
         self._frames: dict[str, ctk.CTkFrame] = {}
         for key, (_, factory) in VIEWS.items():
-            if key == "cart":
+            if key in ("cart", "pantry", "avoid"):
                 frame = factory(self.container, self.cart)
             else:
                 frame = factory(self.container, self.cart, self._on_cart_updated)
@@ -105,7 +123,8 @@ class Dashboard(ctk.CTk):
     def _on_cart_updated(self):
         n = len(self.cart.items)
         total = self.cart.total()
-        self.cart_summary.configure(text=f"🛒 {n} productos\n💰 {total:.2f} €")
+        self.price_lbl.configure(text=f"{total:.2f} €")
+        self.cart_summary.configure(text=f"{n} producto(s)")
         cart_frame = self._frames.get("cart")
         if cart_frame and hasattr(cart_frame, "refresh"):
             cart_frame.refresh()
