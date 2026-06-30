@@ -64,3 +64,49 @@ def test_match_many_returns_one_per_ingredient(mocked_search):
 def test_match_many_uses_fresh_flag(mocked_search):
     product_matcher.match_many(["arroz"], fresh=True)
     mocked_search.assert_called_with("arroz", limit=5, fresh=True)
+
+
+def test_core_name_strips_brand_and_adjectives():
+    from core.product_matcher import _core_name
+    assert "vinagre" in _core_name("Vinagre de manzana Hacendado")
+    assert "vinagre" in _core_name("Vinagre balsámico de Módena Hacendado")
+    # Las dos normalizaciones deben compartir el token 'vinagre'
+    assert "vinagre" in _core_name("Vinagre de manzana Hacendado").split()
+    assert "vinagre" in _core_name("Vinagre balsámico de Módena Hacendado").split()
+
+
+def test_core_name_keeps_distinct_products():
+    from core.product_matcher import _core_name
+    assert _core_name("Tortilla de patata con cebolla") != _core_name("Patatas para cocer")
+    # Pero comparten 'patata' como token - el dedupe usa interseccion de tokens
+
+
+def test_dedupe_by_core_collapses_similar():
+    from core.product_matcher import dedupe_by_core
+    products = [
+        {"id": 1, "name": "Vinagre de manzana Hacendado", "price": 0.9},
+        {"id": 2, "name": "Vinagre balsámico de Módena Hacendado", "price": 1.5},
+        {"id": 3, "name": "Vinagre de vino blanco Hacendado", "price": 0.65},
+        {"id": 4, "name": "Pechuga de pollo", "price": 2.85},
+    ]
+    out = dedupe_by_core(products)
+    # Solo debe quedar 1 vinagre + 1 pechuga
+    assert len(out) == 2
+    assert out[0]["id"] == 1  # el primero gana
+    assert out[1]["id"] == 4
+
+
+def test_dedupe_by_core_keeps_distinct():
+    from core.product_matcher import dedupe_by_core
+    products = [
+        {"id": 1, "name": "Pechuga de pollo"},
+        {"id": 2, "name": "Tomate triturado Hacendado"},
+        {"id": 3, "name": "Cebolla"},
+    ]
+    out = dedupe_by_core(products)
+    assert len(out) == 3
+
+
+def test_dedupe_by_core_empty():
+    from core.product_matcher import dedupe_by_core
+    assert dedupe_by_core([]) == []

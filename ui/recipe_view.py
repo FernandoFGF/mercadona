@@ -242,8 +242,13 @@ class RecipeView(ctk.CTkFrame):
             self._emit_progress(0.55, f"Buscando 0/{total_to_match} en Mercadona…")
             matched = product_matcher.match_many(items_after_pantry, fresh=fresh)
 
+            # Dedupe post-match: si dos productos matched son el mismo 'core'
+            # (ej. 3 vinagres distintos) consolidar en uno. El primero gana.
+            matched = product_matcher.dedupe_by_core(matched)
+
             # Paso 4: rellenar carrito
             cart_log = get_logger("cart")
+            added = 0
             for i, (ing_name, product, qty) in enumerate(zip(items_after_pantry, matched, qtys_after_pantry), 1):
                 frac = 0.55 + 0.40 * (i / total_to_match)
                 self._emit_progress(frac, f"Rellenando carrito {i}/{total_to_match}…")
@@ -253,6 +258,7 @@ class RecipeView(ctk.CTkFrame):
                         "cart + %s x %s (id=%s) from '%s'",
                         qty, product.get("name"), product.get("id"), ing_name,
                     )
+                    added += 1
                     self.after(0, self.on_cart_updated)
 
             self._emit_progress(1.0, "Listo")
@@ -303,6 +309,18 @@ class RecipeView(ctk.CTkFrame):
             ).pack(anchor="w", padx=10, pady=(8, 0))
             txt = "\n".join(f"  • {x}" for x in avoided)
             ctk.CTkLabel(box, text=txt, justify="left").pack(anchor="w", padx=20, pady=(0, 8))
+
+        if items_after_pantry:
+            box = ctk.CTkFrame(self.results)
+            box.pack(fill="x", padx=10, pady=8)
+            ctk.CTkLabel(
+                box, text=f"🛒 Vas a comprar ({len(items_after_pantry)}):",
+                font=ctk.CTkFont(weight="bold"),
+            ).pack(anchor="w", padx=10, pady=(8, 0))
+            txt = "\n".join(f"  • {x}" for x in items_after_pantry)
+            ctk.CTkLabel(box, text=txt, justify="left", wraplength=900).pack(
+                anchor="w", padx=20, pady=(0, 8)
+            )
 
         for day in recipes:
             day_box = ctk.CTkFrame(self.results)

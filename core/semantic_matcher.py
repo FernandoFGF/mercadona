@@ -29,7 +29,7 @@ _EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-emb
 _EMBED_DIM = 3072  # gemini-embedding-001 (legacy: 768 con text-embedding-004)
 _CACHE_PATH = config.DATA_DIR / "embeddings.npz"
 _TTL_SECONDS = 7 * 24 * 3600
-_MIN_SCORE = 0.55
+_MIN_SCORE = 0.70
 
 
 def _is_enabled() -> bool:
