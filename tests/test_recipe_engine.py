@@ -131,3 +131,45 @@ def test_single_person_clause():
         recipe_engine.generate_meal_plan("hola", personas=1, servings=2)
     assert "1 persona" in captured["prompt"]
     assert "2 raciones" in captured["prompt"]
+
+
+def test_meals_in_prompt():
+    """El prompt refleja las comidas elegidas."""
+    captured = {}
+
+    def spy(prompt, system=None):
+        captured["prompt"] = prompt
+        return VALID_PLAN
+
+    with patch("core.recipe_engine.gemini_client.generate_json", side_effect=spy):
+        recipe_engine.generate_meal_plan("hola", meals=["comida", "cena", "almuerzo"])
+    assert "comida, cena, almuerzo" in captured["prompt"]
+
+
+def test_meals_defaults_to_comida_y_cena():
+    """Sin meals, el prompt asume comida + cena."""
+    captured = {}
+
+    def spy(prompt, system=None):
+        captured["prompt"] = prompt
+        return VALID_PLAN
+
+    with patch("core.recipe_engine.gemini_client.generate_json", side_effect=spy):
+        recipe_engine.generate_meal_plan("hola")
+    assert "comida" in captured["prompt"]
+    assert "cena" in captured["prompt"]
+
+
+def test_only_desayuno():
+    """Si el usuario solo quiere desayuno, el prompt refleja 1 meal."""
+    captured = {}
+
+    def spy(prompt, system=None):
+        captured["prompt"] = prompt
+        return VALID_PLAN
+
+    with patch("core.recipe_engine.gemini_client.generate_json", side_effect=spy):
+        recipe_engine.generate_meal_plan("hola", meals=["desayuno"])
+    assert "desayuno" in captured["prompt"]
+    # Cantidad de meals = 1
+    assert "EXACTAMENTE 1 entradas" in captured["prompt"]

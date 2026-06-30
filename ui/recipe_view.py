@@ -92,6 +92,24 @@ class RecipeView(ctk.CTkFrame):
             label = key.replace("_", " ").capitalize()
             ctk.CTkCheckBox(diet_frame, text=label, variable=var, width=110).pack(side="left", padx=4)
 
+        # Selector de comidas del dia. Por defecto comida + cena.
+        meals_frame = ctk.CTkFrame(self, fg_color="transparent")
+        meals_frame.pack(fill="x", padx=20, pady=(0, 5))
+        ctk.CTkLabel(meals_frame, text="Comidas:").pack(side="left", padx=(0, 8))
+        self.meal_vars: dict[str, ctk.BooleanVar] = {}
+        for meal_key, default in (
+            ("desayuno", False),
+            ("almuerzo", False),
+            ("comida", True),
+            ("merienda", False),
+            ("cena", True),
+        ):
+            var = ctk.BooleanVar(value=default)
+            self.meal_vars[meal_key] = var
+            ctk.CTkCheckBox(meals_frame, text=meal_key.capitalize(), variable=var, width=110).pack(
+                side="left", padx=4,
+            )
+
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(0, 10), anchor="w")
         self.generate_btn = ctk.CTkButton(
@@ -126,7 +144,11 @@ class RecipeView(ctk.CTkFrame):
         days = int(self.days_var.get())
         personas = int(self.personas_var.get())
         difficulty = self.difficulty_var.get()
-        servings = personas * 2  # 1 comida + 1 cena por persona y día
+        meals = [k for k, v in self.meal_vars.items() if v.get()]
+        if not meals:
+            # fallback si el usuario desmarca todas
+            meals = ["comida", "cena"]
+        servings = personas * len(meals)
         restrictions = [k for k, v in self.diet_vars.items() if v.get()]
         self._last_prompt = prompt
         history_add(prompt)
@@ -137,7 +159,7 @@ class RecipeView(ctk.CTkFrame):
         self.status.configure(text="Pidiendo ideas a Gemini…")
         threading.Thread(
             target=self._worker,
-            args=(prompt, days, servings, self.fresh_var.get(), restrictions, personas, difficulty),
+            args=(prompt, days, servings, self.fresh_var.get(), restrictions, personas, difficulty, meals),
             daemon=True,
         ).start()
         self.after(80, self._drain_progress)
@@ -179,17 +201,18 @@ class RecipeView(ctk.CTkFrame):
         history_clear()
         self._refresh_history_menu()
 
-    def _worker(self, prompt: str, days: int, servings: int, fresh: bool, restrictions: list[str] | None = None, personas: int = 1, difficulty: str = "cualquiera"):
+    def _worker(self, prompt: str, days: int, servings: int, fresh: bool, restrictions: list[str] | None = None, personas: int = 1, difficulty: str = "cualquiera", meals: list[str] | None = None):
         try:
             pantry = PantryStore()
             avoid = AvoidStore()
 
             # Paso 1: pedir recetas
-            self._emit_progress(0.1, "Pidiendo recetas a Gemini…")
+            self._emit_progress(0.1, "Pidiendo ideas a Gemini…")
             plan = recipe_engine.generate_meal_plan(
                 prompt, days=days, servings=servings,
                 restrictions=restrictions or [],
                 personas=personas, difficulty=difficulty,
+                meals=meals or None,
             )
             self._last_plan = plan
             recipes = plan.get("days", [])
@@ -353,7 +376,13 @@ class RecipeView(ctk.CTkFrame):
 
     def _render_meal(self, parent, r: dict):
         meal = (r.get("meal") or "").upper()
-        meal_emoji = "🍽" if meal == "COMIDA" else "🌙" if meal == "CENA" else "🍴"
+        meal_emoji = {
+            "DESAYUNO": "🥐",
+            "ALMUERZO": "🥪",
+            "COMIDA": "🍽",
+            "MERIENDA": "🍎",
+            "CENA": "🌙",
+        }.get(meal, "🍴")
         box = ctk.CTkFrame(parent)
         box.pack(fill="x", padx=20, pady=4)
         title = f"{meal_emoji} {meal} — {r.get('title', 'Receta')}"

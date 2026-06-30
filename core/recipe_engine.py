@@ -49,6 +49,7 @@ def _recipe_prompt(
     restrictions: list[str] | None = None,
     personas: int = 1,
     difficulty: str = "cualquiera",
+    meals: list[str] | None = None,
 ) -> str:
     dietary = _dietary_block(restrictions or [])
     diff_instruction = {
@@ -62,10 +63,29 @@ def _recipe_prompt(
         if personas > 1
         else "El plan es para 1 persona."
     )
+
+    # Comidas del dia. Por defecto comida + cena si el usuario no eligio nada.
+    meals = meals or ["comida", "cena"]
+    if not meals:
+        meals = ["comida", "cena"]
+    meals_str = ", ".join(meals)
+    example_meals = "\n".join(
+        f"""        {{
+          "meal": "{m}",
+          "title": "...",
+          "description": "...",
+          "difficulty": "facil|media|elaborada",
+          "prep_minutes": 20,
+          "steps": ["paso 1", "..."],
+          "ingredients": [{{"name": "...", "quantity": "..."}}]
+        }}{"," if i < len(meals) - 1 else ""}"""
+        for i, m in enumerate(meals)
+    )
+
     return f"""
 Petición del usuario: "{user_request}"
 
-Necesito un plan de {days} día(s), cada día con DOS recetas: una COMIDA (mediodía) y una CENA (noche).
+Necesito un plan de {days} día(s). Cada día incluye recetas para: {meals_str}.
 Cantidades para {servings} raciones por receta ({personas} persona(s)).
 {personas_clause}
 
@@ -79,30 +99,7 @@ Devuelve estrictamente este JSON:
       "day": 1,
       "weekday": "lunes",
       "meals": [
-        {{
-          "meal": "comida",
-          "title": "Nombre de la receta de comida",
-          "description": "Breve descripción en 1 línea",
-          "difficulty": "facil|media|elaborada",
-          "prep_minutes": 20,
-          "steps": ["paso 1", "paso 2", "..."],
-          "ingredients": [
-            {{"name": "tomate triturado", "quantity": "200g"}},
-            {{"name": "aceite de oliva virgen extra", "quantity": "30ml"}}
-          ]
-        }},
-        {{
-          "meal": "cena",
-          "title": "Nombre de la receta de cena",
-          "description": "Breve descripción en 1 línea",
-          "difficulty": "facil|media|elaborada",
-          "prep_minutes": 15,
-          "steps": ["paso 1", "paso 2", "..."],
-          "ingredients": [
-            {{"name": "lechuga", "quantity": "1 unidad"}},
-            {{"name": "atún en conserva", "quantity": "2 latas"}}
-          ]
-        }}
+{example_meals}
       ]
     }}
   ]
@@ -110,7 +107,8 @@ Devuelve estrictamente este JSON:
 
 Reglas:
 - EXACTAMENTE {days} objetos en "days", uno por día (1 a {days}).
-- Cada día tiene EXACTAMENTE 2 entradas en "meals": una con "meal":"comida" y otra con "meal":"cena" (en ese orden).
+- Cada día tiene EXACTAMENTE {len(meals)} entradas en "meals", en este orden: {meals_str}.
+- "meal" debe ser uno de: desayuno, almuerzo, comida, merienda, cena.
 - "weekday" en minúsculas: lunes, martes, miércoles, jueves, viernes, sábado, domingo.
 - Ingredientes con nombres reconocibles en un supermercado Mercadona (ej: "pechuga de pollo", "arroz redondo", "tomate triturado", "aceite de oliva virgen extra").
 - Cantidades realistas para {servings} raciones por receta ({personas} persona(s)).
@@ -155,6 +153,7 @@ def generate_meal_plan(
     restrictions: list[str] | None = None,
     personas: int = 1,
     difficulty: str = "cualquiera",
+    meals: list[str] | None = None,
 ) -> dict[str, Any]:
     """Genera un plan de recetas estructurado a partir de una petición libre."""
     servings = max(1, servings) if servings else max(1, personas * 2)
@@ -162,6 +161,7 @@ def generate_meal_plan(
         user_request, days, servings,
         restrictions=restrictions or [],
         personas=personas, difficulty=difficulty,
+        meals=meals,
     )
     try:
         data = gemini_client.generate_json(prompt, system=RECIPE_SYSTEM)

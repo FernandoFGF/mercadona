@@ -31,6 +31,13 @@ def test_recipe_invalid_meal_defaults():
     assert r.meal == "comida"
 
 
+def test_recipe_all_meal_types():
+    """Los 5 tipos de comida se aceptan."""
+    for meal in ("desayuno", "almuerzo", "comida", "merienda", "cena"):
+        r = Recipe.from_dict({"day": 1, "meal": meal, "title": "T"})
+        assert r.meal == meal
+
+
 def test_recipe_filters_empty_steps():
     r = Recipe.from_dict({"day": 1, "title": "T", "steps": ["a", "", "  ", "b"]})
     assert r.steps == ["a", "b"]

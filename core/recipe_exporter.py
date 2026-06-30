@@ -35,11 +35,21 @@ def _steps_section(steps: list[str]) -> str:
     return "\n".join(lines)
 
 
+_MEAL_EMOJI = {
+    "DESAYUNO": "🥐",
+    "ALMUERZO": "🥪",
+    "COMIDA": "🍽",
+    "MERIENDA": "🍎",
+    "CENA": "🌙",
+}
+
+
 def _meal_section(r: dict[str, Any]) -> list[str]:
     out: list[str] = []
     meal = (r.get("meal") or "").upper()
     rec_title = r.get("title", "Receta sin título")
-    meal_str = f" — {meal}" if meal else ""
+    emoji = _MEAL_EMOJI.get(meal, "🍴")
+    meal_str = f" {emoji} {meal}" if meal else ""
     difficulty = r.get("difficulty", "")
     prep = r.get("prep_minutes", 0)
     meta_bits = []

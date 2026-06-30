@@ -44,7 +44,7 @@ class Recipe:
         except (TypeError, ValueError):
             raise ValueError(f"recipe.day inválido: {d.get('day')!r}")
         meal = str(d.get("meal", "")).strip().lower() or "comida"
-        if meal not in ("comida", "cena"):
+        if meal not in ("desayuno", "almuerzo", "comida", "merienda", "cena"):
             meal = "comida"
         title = str(d.get("title", "")).strip() or "Receta sin título"
         description = str(d.get("description", "")).strip()
