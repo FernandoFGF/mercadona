@@ -222,28 +222,22 @@ class RecipeView(ctk.CTkFrame):
                 else:
                     merged[key] = {"display_name": name, "quantity": qty, "unit": unit}
 
-            # Dedupe por core: "vinagre de manzana" + "vinagre balsamico" + "vinagre
-            # de vino blanco" se consolidan a un solo "vinagre" antes de aplicar
-            # pantry/avoid. Asi si el usuario tiene "vinagre" en pantry, los tres se
-            # filtran juntos en vez de quedar 3 lineas en el carrito.
-            core_groups: dict[str, dict] = {}
-            for v in merged.values():
-                core = product_matcher._core_name(v["display_name"])
-                if not core:
-                    core_groups[v["display_name"].lower()] = v
-                    continue
-                if core in core_groups:
-                    core_groups[core]["quantity"] += v["quantity"]
-                    if not core_groups[core].get("unit") and v.get("unit"):
-                        core_groups[core]["unit"] = v["unit"]
-                else:
-                    core_groups[core] = v
+            # APLICAR PANTRY ANTES del dedupe por core. Asi "filetes de salmon" y
+            # "lomos de salmon" (con primary_core distinto "filetes" vs "lomos")
+            # se filtran individualmente por fuzzy contra "salmon" en pantry,
+            # sin depender de que compartan primary_core.
+            items_for_matcher_pre = [v["display_name"] for v in merged.values()]
+            quantities_pre = [
+                v["quantity"] for v in merged.values()
+            ]
 
             # Normalizar al final: g/ml > 5 -> kg/litro
-            items_for_matcher = [v["display_name"] for v in core_groups.values()]
+            items_for_matcher = [
+                v["display_name"] for v in merged.values()
+            ]
             quantities = [
                 normalize_for_cart(v["quantity"], v.get("unit", ""), v["display_name"])
-                for v in core_groups.values()
+                for v in merged.values()
             ]
 
             avoided = [it for it in items_for_matcher if avoid.contains(it)]

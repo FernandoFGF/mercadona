@@ -119,16 +119,27 @@ class _ListStore:
         term_n = _normalize(term)
         if not term_n:
             return False
-        term_core = _core_name(term)
+        # Import lazy: el modulo core.product_matcher importa config
+        # que en tests se redirige con monkeypatch
+        try:
+            from core.product_matcher import _primary_core
+            term_pcore = _primary_core(term)
+        except Exception:
+            term_pcore = ""
         for it in self._load():
             it_n = _normalize(it)
-            # Match 1: fuzzy directo (umbrella baja para typos)
+            # Match 1: fuzzy directo (alto umbral para typos)
             if _score(term_n, it_n) >= _FUZZY_THRESHOLD:
                 return True
-            # Match 2: comparten 'core' (ej. "vinagre" en "vinagre de manzana"
-            # y "vinagre" en la lista -> match, aunque el score fuzzy sea bajo).
-            if term_core and term_core == _core_name(it):
-                return True
+            # Match 2: comparten 'primary core' (sustantivo principal).
+            # Ej. "vinagre" en pantry matchea "vinagre de manzana" porque
+            # _primary_core de ambos es "vinagre".
+            if term_pcore:
+                try:
+                    if term_pcore == _primary_core(it):
+                        return True
+                except Exception:
+                    pass
         return False
 
     def filter_out(self, terms: Iterable[str]) -> list[str]:

@@ -114,6 +114,36 @@ def _core_name(name: str) -> str:
     return " ".join(sorted(tokens))
 
 
+def _primary_core(name: str) -> str:
+    """Devuelve solo el 'sustantivo principal' del producto: el primer
+    token significativo (>=4 letras, no numero).
+
+    Usado para agrupar variaciones que comparten la raiz (ej. 'vinagre
+    de manzana' / 'vinagre balsamico' -> 'vinagre' ambos).
+    """
+    s = name.lower()
+    for brand in ("hacendado", "deluxe", "bosque verde", "casa juncal",
+                  "soler de cabras", "anitin"):
+        s = s.replace(brand, "")
+    stop = (
+        "de", "el", "la", "los", "las", "con", "sin", "para", "al",
+        "reserva", "ecologico", "ecologica", "bio", "light", "0%",
+        "natural", "fresco", "fresca", "entero", "entera", "troceado",
+        "rallado", "lavado", "lavada", "pelado", "pelada", "cocido",
+        "cocida", "en", "conserva", "lonchas", "rodajas", "dientes",
+        "extra", "virgen", "molido", "picado", "molida", "picada",
+    )
+    for tok in re.split(r"[^a-z0-9]+", s):
+        if not tok or tok in stop:
+            continue
+        if len(tok) < 4:
+            continue
+        if tok.isdigit():
+            continue
+        return tok
+    return ""
+
+
 def dedupe_by_core(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Consolida productos cuyo core normalizado es identico o muy similar.
 

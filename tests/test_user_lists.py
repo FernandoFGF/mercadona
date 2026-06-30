@@ -89,3 +89,31 @@ def test_pantry_filter_out_dedupes_variations(tmp_data_dir):
         "tomate triturado",
     ])
     assert remaining == ["vinagre de manzana", "tomate triturado"]
+
+
+def test_pantry_matches_by_primary_core(tmp_data_dir):
+    """Si el usuario tiene 'vinagre' en pantry, todas las variaciones
+    (manzana, balsamico, vino blanco) matchean via _primary_core."""
+    p = PantryStore()
+    p.add("vinagre")
+    assert p.contains("Vinagre de manzana") is True
+    assert p.contains("Vinagre balsámico de Módena") is True
+    assert p.contains("Vinagre de vino blanco") is True
+
+
+def test_pantry_matches_salmon_variations(tmp_data_dir):
+    """Lo mismo para salmon: el usuario tiene 'salmon' y la receta
+    propone 'filetes de salmon' / 'lomos de salmon' / 'salmon ahumado'."""
+    p = PantryStore()
+    p.add("salmon")
+    assert p.contains("Filetes de salmon fresco") is True
+    assert p.contains("Lomos de salmon") is True
+    assert p.contains("Salmon ahumado") is True
+
+
+def test_pantry_does_not_match_unrelated(tmp_data_dir):
+    """Que el primary core matchee no debe meter falsos positivos."""
+    p = PantryStore()
+    p.add("vinagre")
+    assert p.contains("Aceite de oliva") is False
+    assert p.contains("Tomate triturado") is False

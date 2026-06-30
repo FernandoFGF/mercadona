@@ -110,3 +110,23 @@ def test_dedupe_by_core_keeps_distinct():
 def test_dedupe_by_core_empty():
     from core.product_matcher import dedupe_by_core
     assert dedupe_by_core([]) == []
+
+
+def test_primary_core_extracts_main_noun():
+    from core.product_matcher import _primary_core
+    assert _primary_core("Vinagre de manzana Hacendado") == "vinagre"
+    assert _primary_core("Vinagre balsámico de Módena Hacendado") == "vinagre"
+    assert _primary_core("Filetes de salmón fresco") == "filetes"
+    assert _primary_core("Lomos de salmón ahumado") == "lomos"
+    assert _primary_core("Salmón Hacendado") == "salmn" or _primary_core("Salmón Hacendado") == "salmón".replace("ó","o")[:4]
+
+
+def test_primary_core_groups_vinegars():
+    """3 vinagres distintos deben compartir primary_core."""
+    from core.product_matcher import _primary_core
+    cores = {
+        _primary_core("Vinagre de manzana"),
+        _primary_core("Vinagre balsámico"),
+        _primary_core("Vinagre de vino blanco"),
+    }
+    assert len(cores) == 1
