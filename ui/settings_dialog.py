@@ -56,6 +56,18 @@ class SettingsDialog(ctk.CTkToplevel):
             body, values=["dark", "light"], variable=self.appearance_var, width=200,
         ).grid(row=4, column=1, sticky="w", padx=10)
 
+        # Matching semántico
+        ctk.CTkLabel(body, text="Matching semántico:").grid(row=5, column=0, sticky="w", pady=6)
+        self.embeddings_var = ctk.BooleanVar(value=bool(settings_store.get("usar_embeddings")))
+        ctk.CTkSwitch(
+            body, text="", variable=self.embeddings_var, width=50,
+        ).grid(row=5, column=1, sticky="w", padx=10)
+        ctk.CTkLabel(
+            body,
+            text="Desactívalo si ves errores 429\n(quota de Gemini agotada)",
+            text_color="gray",
+        ).grid(row=6, column=1, sticky="w", padx=10)
+
         body.grid_columnconfigure(1, weight=1)
 
         btns = ctk.CTkFrame(self, fg_color="transparent")
@@ -85,6 +97,14 @@ class SettingsDialog(ctk.CTkToplevel):
         settings_store.set_value("mercadona_warehouse", self.wh_var.get().strip() or "mad1")
         settings_store.set_value("mercadona_max_eur", max_eur)
         settings_store.set_value("appearance_mode", new_appearance)
+        settings_store.set_value("usar_embeddings", bool(self.embeddings_var.get()))
+        # Si reactivamos embeddings, reseteamos el circuit breaker.
+        if self.embeddings_var.get():
+            try:
+                from core import semantic_matcher
+                semantic_matcher.reset_circuit()
+            except Exception:
+                pass
 
         if new_appearance != old_appearance and self.on_appearance_change:
             self.on_appearance_change(new_appearance)

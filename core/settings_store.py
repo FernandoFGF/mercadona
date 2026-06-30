@@ -27,6 +27,7 @@ DEFAULTS = {
     "mercadona_warehouse": config.MERCADONA_WAREHOUSE,
     "mercadona_max_eur": config.MERCADONA_MAX_EUR,
     "appearance_mode": "dark",  # dark | light
+    "usar_embeddings": True,  # matching semántico; desactivar si da 429
 }
 
 

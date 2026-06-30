@@ -124,6 +124,13 @@ class Dashboard(ctk.CTk):
                 text="● mercadona CLI no encontrado\n  npm i -g @ivorpad/mercadona",
                 text_color="#e95",
             )
+        # Indicador de circuit breaker de embeddings
+        from core import semantic_matcher
+        if semantic_matcher.circuit_is_open():
+            self.status_cli.configure(
+                text="● Embeddings desactivados (429)\n  Actívalos en ⚙ cuando se levante la cuota",
+                text_color="#e95",
+            )
 
     def show(self, key: str):
         frame = self._frames[key]
