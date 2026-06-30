@@ -188,8 +188,21 @@ class RecipeView(ctk.CTkFrame):
             # Paso 2: consolidar
             self._emit_progress(0.35, "Consolidando ingredientes…")
             shopping = recipe_engine.consolidate_shopping_list(recipes)
-            items_for_matcher = [it["name"] for it in shopping] or all_ingredients
-            quantities = [parse_quantity(it.get("quantity", "")) for it in shopping] or [1.0] * len(all_ingredients)
+            raw_names = [it["name"] for it in shopping] or all_ingredients
+            raw_quantities = [parse_quantity(it.get("quantity", "")) for it in shopping] or [1.0] * len(all_ingredients)
+
+            # Dedupe por nombre normalizado: si Gemini devuelve "quinoa" 5 veces
+            # con "1kg" cada una, sumamos a una sola entrada de 5kg.
+            merged: dict[str, dict] = {}
+            for name, qty in zip(raw_names, raw_quantities):
+                key = name.lower().strip()
+                if key in merged:
+                    merged[key]["quantity"] += qty
+                    merged[key]["display_name"] = merged[key].get("display_name", name)
+                else:
+                    merged[key] = {"display_name": name, "quantity": qty}
+            items_for_matcher = [v["display_name"] for v in merged.values()]
+            quantities = [v["quantity"] for v in merged.values()]
 
             avoided = [it for it in items_for_matcher if avoid.contains(it)]
             items_after_avoid = [it for it in items_for_matcher if not avoid.contains(it)]
@@ -208,11 +221,17 @@ class RecipeView(ctk.CTkFrame):
             matched = product_matcher.match_many(items_after_pantry, fresh=fresh)
 
             # Paso 4: rellenar carrito
+            from core.logging_setup import get_logger
+            cart_log = get_logger("cart")
             for i, (ing_name, product, qty) in enumerate(zip(items_after_pantry, matched, qtys_after_pantry), 1):
                 frac = 0.55 + 0.40 * (i / total_to_match)
                 self._emit_progress(frac, f"Rellenando carrito {i}/{total_to_match}…")
                 if product and product.get("id"):
                     self.cart.add(product, quantity=qty, origin=ing_name)
+                    cart_log.info(
+                        "cart + %s x %s (id=%s) from '%s'",
+                        qty, product.get("name"), product.get("id"), ing_name,
+                    )
                     self.after(0, self.on_cart_updated)
 
             self._emit_progress(1.0, "Listo")

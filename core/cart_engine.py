@@ -28,9 +28,12 @@ class Cart:
         if pid is None:
             return
         qty = max(0.0, float(quantity))
+        # Red de seguridad: tope absoluto por item para evitar runaway
+        # (p.ej. 14 "quinoa 1kg" sumadas en una sola línea).
+        qty = min(qty, 1000.0)
         for it in self.items:
             if it.product_id == pid:
-                it.quantity = round(it.quantity + qty, 4)
+                it.quantity = round(min(it.quantity + qty, 1000.0), 4)
                 return
         self.items.append(
             CartItem(

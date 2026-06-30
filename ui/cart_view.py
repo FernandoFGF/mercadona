@@ -77,7 +77,7 @@ class CartView(ctk.CTkFrame):
             ).pack(side="right", padx=2)
 
             qty_var = ctk.StringVar(value=f"{it.quantity:g}")
-            entry = ctk.CTkEntry(row, textvariable=qty_var, width=60, justify="e")
+            entry = ctk.CTkEntry(row, textvariable=qty_var, width=60, justify="right")
             entry.pack(side="right", padx=4)
             entry.bind(
                 "<Return>",
