@@ -42,15 +42,35 @@ def _dietary_block(restrictions: list[str]) -> str:
     return "\n".join(lines)
 
 
-def _recipe_prompt(user_request: str, days: int, servings: int, restrictions: list[str] | None = None) -> str:
+def _recipe_prompt(
+    user_request: str,
+    days: int,
+    servings: int,
+    restrictions: list[str] | None = None,
+    personas: int = 1,
+    difficulty: str = "cualquiera",
+) -> str:
     dietary = _dietary_block(restrictions or [])
+    diff_instruction = {
+        "facil": "Todas las recetas deben ser de dificultad FÁCIL (≤20 min, pocos pasos, sin técnicas avanzadas).",
+        "media": "Todas las recetas deben ser de dificultad MEDIA (~30 min, sin técnicas muy avanzadas).",
+        "elaborada": "Las recetas pueden ser ELABORADAS (≥45 min, técnicas avanzadas permitidas).",
+        "cualquiera": "Varía la dificultad a lo largo de la semana (fácil entre semana, más elaborada el finde).",
+    }.get(difficulty, "")
+    personas_clause = (
+        f"El plan es para {personas} persona(s). Ajusta las cantidades al número de comensales."
+        if personas > 1
+        else "El plan es para 1 persona."
+    )
     return f"""
 Petición del usuario: "{user_request}"
 
 Necesito un plan de {days} día(s), cada día con DOS recetas: una COMIDA (mediodía) y una CENA (noche).
-Cantidades para {servings} raciones por receta (4 raciones = comida para 2 personas + cena del mismo día reutilizando restos cuando tenga sentido).
+Cantidades para {servings} raciones por receta ({personas} persona(s)).
+{personas_clause}
 
 {dietary}
+{diff_instruction}
 
 Devuelve estrictamente este JSON:
 {{
@@ -93,8 +113,8 @@ Reglas:
 - Cada día tiene EXACTAMENTE 2 entradas en "meals": una con "meal":"comida" y otra con "meal":"cena" (en ese orden).
 - "weekday" en minúsculas: lunes, martes, miércoles, jueves, viernes, sábado, domingo.
 - Ingredientes con nombres reconocibles en un supermercado Mercadona (ej: "pechuga de pollo", "arroz redondo", "tomate triturado", "aceite de oliva virgen extra").
-- Cantidades realistas para {servings} raciones por receta.
-- "difficulty" = "facil" para entre semana, "media" o "elaborada" para finde si el usuario lo pide.
+- Cantidades realistas para {servings} raciones por receta ({personas} persona(s)).
+- {diff_instruction}
 - "steps" entre 3 y 7 pasos cortos.
 - Varía proteínas, verduras y cereales a lo largo de la semana; no repitas la misma proteína tres días seguidos.
 - Si la petición menciona colesterol, calorías, vegetariano, sin gluten, ligero, fresco, verano, etc., respétalo.
@@ -128,9 +148,21 @@ Reglas:
 """.strip()
 
 
-def generate_meal_plan(user_request: str, days: int = 1, servings: int = 2, restrictions: list[str] | None = None) -> dict[str, Any]:
+def generate_meal_plan(
+    user_request: str,
+    days: int = 1,
+    servings: int = 2,
+    restrictions: list[str] | None = None,
+    personas: int = 1,
+    difficulty: str = "cualquiera",
+) -> dict[str, Any]:
     """Genera un plan de recetas estructurado a partir de una petición libre."""
-    prompt = _recipe_prompt(user_request, days, servings, restrictions=restrictions or [])
+    servings = max(1, servings) if servings else max(1, personas * 2)
+    prompt = _recipe_prompt(
+        user_request, days, servings,
+        restrictions=restrictions or [],
+        personas=personas, difficulty=difficulty,
+    )
     try:
         data = gemini_client.generate_json(prompt, system=RECIPE_SYSTEM)
         MealPlan.from_dict(data)

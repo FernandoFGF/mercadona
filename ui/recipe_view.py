@@ -58,11 +58,20 @@ class RecipeView(ctk.CTkFrame):
             side="left", padx=(0, 15)
         )
 
-        ctk.CTkLabel(opts, text="Raciones/día:").pack(side="left", padx=(0, 5))
-        self.serv_var = ctk.IntVar(value=2)
-        ctk.CTkOptionMenu(opts, values=["1", "2", "3", "4"], variable=self.serv_var, width=70).pack(
-            side="left", padx=(0, 15)
-        )
+        ctk.CTkLabel(opts, text="Personas:").pack(side="left", padx=(0, 5))
+        self.personas_var = ctk.IntVar(value=2)
+        ctk.CTkOptionMenu(
+            opts, values=["1", "2", "3", "4", "5", "6"],
+            variable=self.personas_var, width=70,
+        ).pack(side="left", padx=(0, 15))
+
+        ctk.CTkLabel(opts, text="Dificultad:").pack(side="left", padx=(0, 5))
+        self.difficulty_var = ctk.StringVar(value="cualquiera")
+        ctk.CTkOptionMenu(
+            opts,
+            values=["cualquiera", "fácil", "media", "elaborada"],
+            variable=self.difficulty_var, width=120,
+        ).pack(side="left", padx=(0, 15))
 
         ctk.CTkLabel(opts, text="Solo frescos:").pack(side="left", padx=(0, 5))
         self.fresh_var = ctk.BooleanVar(value=True)
@@ -115,7 +124,9 @@ class RecipeView(ctk.CTkFrame):
         if not prompt:
             return
         days = int(self.days_var.get())
-        servings = int(self.serv_var.get())
+        personas = int(self.personas_var.get())
+        difficulty = self.difficulty_var.get()
+        servings = personas * 2  # 1 comida + 1 cena por persona y día
         restrictions = [k for k, v in self.diet_vars.items() if v.get()]
         self._last_prompt = prompt
         history_add(prompt)
@@ -126,7 +137,7 @@ class RecipeView(ctk.CTkFrame):
         self.status.configure(text="Pidiéndole ideas a Gemini…")
         threading.Thread(
             target=self._worker,
-            args=(prompt, days, servings, self.fresh_var.get(), restrictions),
+            args=(prompt, days, servings, self.fresh_var.get(), restrictions, personas, difficulty),
             daemon=True,
         ).start()
         self.after(80, self._drain_progress)
@@ -168,7 +179,7 @@ class RecipeView(ctk.CTkFrame):
         history_clear()
         self._refresh_history_menu()
 
-    def _worker(self, prompt: str, days: int, servings: int, fresh: bool, restrictions: list[str] | None = None):
+    def _worker(self, prompt: str, days: int, servings: int, fresh: bool, restrictions: list[str] | None = None, personas: int = 1, difficulty: str = "cualquiera"):
         try:
             pantry = PantryStore()
             avoid = AvoidStore()
@@ -176,7 +187,9 @@ class RecipeView(ctk.CTkFrame):
             # Paso 1: pedir recetas
             self._emit_progress(0.1, "Pidiendo recetas a Gemini…")
             plan = recipe_engine.generate_meal_plan(
-                prompt, days=days, servings=servings, restrictions=restrictions or []
+                prompt, days=days, servings=servings,
+                restrictions=restrictions or [],
+                personas=personas, difficulty=difficulty,
             )
             self._last_plan = plan
             recipes = plan.get("days", [])

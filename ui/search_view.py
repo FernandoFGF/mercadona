@@ -6,9 +6,11 @@ import threading
 from pathlib import Path
 
 import customtkinter as ctk
+from tkinter import messagebox
 
 from adapters import mercadona_cli
 from core.cart_engine import Cart
+from core.user_lists import PantryStore, AvoidStore
 import config
 
 
@@ -95,28 +97,44 @@ class SearchView(ctk.CTkFrame):
             ref = h.get("reference_price") or ""
             row = ctk.CTkFrame(self.results)
             row.pack(fill="x", padx=8, pady=4)
-            ctk.CTkLabel(row, text=name, anchor="w", wraplength=400, justify="left").pack(
+            ctk.CTkLabel(row, text=name, anchor="w", wraplength=300, justify="left").pack(
                 side="left", padx=8, fill="x", expand=True
             )
-            ctk.CTkLabel(row, text=f"{float(price):.2f} €", width=80, anchor="e").pack(side="right", padx=4)
+            ctk.CTkLabel(row, text=f"{float(price):.2f} €", width=70, anchor="e").pack(side="right", padx=2)
             if ref:
-                ctk.CTkLabel(row, text=str(ref), width=110, anchor="e", text_color="gray").pack(
-                    side="right", padx=4
+                ctk.CTkLabel(row, text=str(ref), width=90, anchor="e", text_color="gray").pack(
+                    side="right", padx=2
                 )
             ctk.CTkButton(
                 row,
-                text="+ Añadir",
-                width=90,
+                text="+ Carrito",
+                width=80,
                 command=lambda p=h: self._add(p),
-            ).pack(side="right", padx=4)
+            ).pack(side="right", padx=2)
             ctk.CTkButton(
                 row,
-                text="★ Guardar",
-                width=90,
+                text="★ Match",
+                width=70,
                 fg_color="#356",
                 hover_color="#234",
                 command=lambda p=h, q=current_query: self._save_default(q, p),
-            ).pack(side="right", padx=4)
+            ).pack(side="right", padx=2)
+            ctk.CTkButton(
+                row,
+                text="🏺 +",
+                width=36,
+                fg_color="#363",
+                hover_color="#242",
+                command=lambda p=h, q=current_query: self._add_to_list("pantry", q, p),
+            ).pack(side="right", padx=2)
+            ctk.CTkButton(
+                row,
+                text="🚫 +",
+                width=36,
+                fg_color="#a33",
+                hover_color="#822",
+                command=lambda p=h, q=current_query: self._add_to_list("avoid", q, p),
+            ).pack(side="right", padx=2)
 
     def _add(self, product: dict):
         pi = product.get("price_instructions", {}) if isinstance(product.get("price_instructions"), dict) else {}
@@ -139,3 +157,19 @@ class SearchView(ctk.CTkFrame):
         _save_default_matches(self._default_matches)
         name = product.get("display_name") or product.get("name") or str(pid)
         self.status.configure(text=f"Guardado como match por defecto para '{term}': {name}")
+
+    def _add_to_list(self, list_name: str, term: str, product: dict):
+        """Añade el término (o nombre del producto si no hay query) a pantry o avoid."""
+        store = PantryStore() if list_name == "pantry" else AvoidStore()
+        label = "pantry" if list_name == "pantry" else "avoid"
+        # Priorizar el nombre del producto; si no, el término buscado
+        name = (
+            product.get("display_name") or product.get("name") or product.get("product_name")
+            or term
+        ).strip()
+        if not name:
+            return
+        if not store.add(name):
+            messagebox.showinfo("Ya está", f"'{name}' ya está en {label}.")
+            return
+        self.status.configure(text=f"Añadido a {label}: {name}")

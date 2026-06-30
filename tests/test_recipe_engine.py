@@ -76,3 +76,58 @@ def test_dietary_block_empty_when_no_restrictions():
     with patch("core.recipe_engine.gemini_client.generate_json", side_effect=spy):
         recipe_engine.generate_meal_plan("hola", restrictions=[])
     assert "RESTRICCIONES" not in captured["prompt"]
+
+
+def test_personas_in_prompt():
+    captured = {}
+
+    def spy(prompt, system=None):
+        captured["prompt"] = prompt
+        return VALID_PLAN
+
+    with patch("core.recipe_engine.gemini_client.generate_json", side_effect=spy):
+        recipe_engine.generate_meal_plan("hola", personas=2)
+    assert "2 persona(s)" in captured["prompt"]
+
+
+def test_difficulty_in_prompt():
+    captured = {}
+
+    def spy(prompt, system=None):
+        captured["prompt"] = prompt
+        return VALID_PLAN
+
+    with patch("core.recipe_engine.gemini_client.generate_json", side_effect=spy):
+        recipe_engine.generate_meal_plan("hola", difficulty="facil")
+    assert "FÁCIL" in captured["prompt"]
+
+    with patch("core.recipe_engine.gemini_client.generate_json", side_effect=spy):
+        recipe_engine.generate_meal_plan("hola", difficulty="cualquiera")
+    assert "Varía la dificultad" in captured["prompt"]
+
+
+def test_personas_clause_in_prompt():
+    """La cláusula de personas aparece en el prompt."""
+    captured = {}
+
+    def spy(prompt, system=None):
+        captured["prompt"] = prompt
+        return VALID_PLAN
+
+    with patch("core.recipe_engine.gemini_client.generate_json", side_effect=spy):
+        recipe_engine.generate_meal_plan("hola", personas=3, servings=6)
+    assert "3 persona(s)" in captured["prompt"]
+    assert "6 raciones" in captured["prompt"]
+
+
+def test_single_person_clause():
+    captured = {}
+
+    def spy(prompt, system=None):
+        captured["prompt"] = prompt
+        return VALID_PLAN
+
+    with patch("core.recipe_engine.gemini_client.generate_json", side_effect=spy):
+        recipe_engine.generate_meal_plan("hola", personas=1, servings=2)
+    assert "1 persona" in captured["prompt"]
+    assert "2 raciones" in captured["prompt"]
